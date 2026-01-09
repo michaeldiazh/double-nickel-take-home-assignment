@@ -51,9 +51,34 @@ export interface LLMResponse {
   model: string;
   
   /**
-   * Optional metadata about the response (tokens used, etc.).
+   * Optional metadata about the response (tokens used, response ID, etc.).
    */
-  metadata?: Record<string, unknown>;
+  metadata?: {
+    usage?: {
+      promptTokens?: number;
+      completionTokens?: number;
+      totalTokens?: number;
+    };
+    responseId?: string;
+    [key: string]: unknown;
+  };
+}
+
+/**
+ * Result of validating an LLM API response.
+ * Used across providers (OpenAI, Gemini, etc.) for consistent error handling.
+ */
+export interface ResponseValidationResult {
+  /**
+   * Whether the response structure is valid.
+   */
+  isValid: boolean;
+  
+  /**
+   * Optional error message describing why validation failed.
+   * Only present when isValid is false.
+   */
+  error?: string;
 }
 
 /**

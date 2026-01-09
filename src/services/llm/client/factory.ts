@@ -1,5 +1,6 @@
 import { LLMClient } from './interface';
 import { LLMClientConfig } from './types';
+import { createOpenAIClient, OpenAIClientConfig } from './providers/openai/openai-client';
 
 /**
  * Supported LLM provider types.
@@ -29,8 +30,12 @@ export interface CreateLLMClientConfig extends LLMClientConfig {
 export const createLLMClient = (config: CreateLLMClientConfig): LLMClient => {
   switch (config.provider) {
     case LLMProvider.OPENAI:
-      // TODO: Import and return OpenAI client when implemented
-      throw new Error('OpenAI client not yet implemented');
+      const openAIConfig: OpenAIClientConfig = {
+        apiKey: config.apiKey,
+        model: config.model,
+        baseUrl: config.baseUrl,
+      };
+      return createOpenAIClient(openAIConfig);
       
     case LLMProvider.GEMINI:
       // TODO: Import and return Gemini client when implemented
