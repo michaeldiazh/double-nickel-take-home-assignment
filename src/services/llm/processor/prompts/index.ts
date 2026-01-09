@@ -7,11 +7,15 @@ export {
   buildSystemPromptWithRequirement,
 } from './system-prompt';
 
+export type {
+  SystemPromptWithRequirementParams,
+} from './types';
+
 export {
-  buildConversationContext,
+  buildConversationContextMessage,
   buildRequirementsSummary,
   type ConversationContext,
-} from './context-builder';
+} from './prompt-context';
 
 export {
   buildInitialPrompt,
