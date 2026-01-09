@@ -1,0 +1,215 @@
+[
+  {
+    "testName": "building basic select query for job",
+    "input": {
+      "selectColumns": ["id", "name", "payment_type", "is_active"],
+      "fromTable": "job"
+    },
+    "expected": {
+      "query": "select id, name, payment_type, is_active\n    from job",
+      "values": []
+    }
+  },
+  {
+    "testName": "building select query for job with all columns",
+    "input": {
+      "selectColumns": ["id", "name", "description", "payment_type", "hourly_pay", "miles_pay", "salary_pay", "address_id", "is_active", "created_at", "updated_at"],
+      "fromTable": "job"
+    },
+    "expected": {
+      "query": "select id, name, description, payment_type, hourly_pay, miles_pay, salary_pay, address_id, is_active, created_at, updated_at\n    from job",
+      "values": []
+    }
+  },
+  {
+    "testName": "building select query for job with WHERE clause",
+    "input": {
+      "selectColumns": ["id", "name", "payment_type"],
+      "fromTable": "job",
+      "whereClause": [
+        {
+          "tableName": "job",
+          "column": "payment_type",
+          "filter": "=",
+          "value": "HOUR"
+        }
+      ]
+    },
+    "expected": {
+      "query": "select id, name, payment_type\n    from job\n    \n    where job.payment_type = $1",
+      "values": ["HOUR"]
+    }
+  },
+  {
+    "testName": "building select query for job with multiple WHERE conditions",
+    "input": {
+      "selectColumns": ["id", "name", "hourly_pay", "is_active"],
+      "fromTable": "job",
+      "whereClause": [
+        {
+          "tableName": "job",
+          "column": "payment_type",
+          "filter": "=",
+          "value": "HOUR"
+        },
+        {
+          "tableName": "job",
+          "column": "is_active",
+          "filter": "=",
+          "value": true
+        },
+        {
+          "tableName": "job",
+          "column": "hourly_pay",
+          "filter": ">",
+          "value": 25
+        }
+      ]
+    },
+    "expected": {
+      "query": "select id, name, hourly_pay, is_active\n    from job\n    \n    where job.payment_type = $1 and job.is_active = $2 and job.hourly_pay > $3",
+      "values": ["HOUR", true, 25]
+    }
+  },
+  {
+    "testName": "building select query for job with JOIN to address",
+    "input": {
+      "selectColumns": ["job.id", "job.name", "address.city", "address.state"],
+      "fromTable": "job",
+      "joinClauses": [
+        {
+          "joinOperator": "join",
+          "sourceTable": "job",
+          "targetTable": "address",
+          "relationship": [["address_id", "id"]]
+        }
+      ]
+    },
+    "expected": {
+      "query": "select job.id, job.name, address.city, address.state\n    from job\n    join address on job.address_id = address.id",
+      "values": []
+    }
+  },
+  {
+    "testName": "building select query for job with LEFT JOIN to address",
+    "input": {
+      "selectColumns": ["job.id", "job.name", "address.city"],
+      "fromTable": "job",
+      "joinClauses": [
+        {
+          "joinOperator": "left join",
+          "sourceTable": "job",
+          "targetTable": "address",
+          "relationship": [["address_id", "id"]]
+        }
+      ]
+    },
+    "expected": {
+      "query": "select job.id, job.name, address.city\n    from job\n    left join address on job.address_id = address.id",
+      "values": []
+    }
+  },
+  {
+    "testName": "building select query for job with WHERE and JOIN",
+    "input": {
+      "selectColumns": ["job.id", "job.name", "address.city", "address.state"],
+      "fromTable": "job",
+      "joinClauses": [
+        {
+          "joinOperator": "join",
+          "sourceTable": "job",
+          "targetTable": "address",
+          "relationship": [["address_id", "id"]]
+        }
+      ],
+      "whereClause": [
+        {
+          "tableName": "job",
+          "column": "is_active",
+          "filter": "=",
+          "value": true
+        },
+        {
+          "tableName": "address",
+          "column": "state",
+          "filter": "=",
+          "value": "CA"
+        }
+      ]
+    },
+    "expected": {
+      "query": "select job.id, job.name, address.city, address.state\n    from job\n    join address on job.address_id = address.id\n    where job.is_active = $1 and address.state = $2",
+      "values": [true, "CA"]
+    }
+  },
+  {
+    "testName": "building select query for job with WHERE, JOIN and ORDER BY",
+    "input": {
+      "selectColumns": ["job.id", "job.name", "job.hourly_pay"],
+      "fromTable": "job",
+      "joinClauses": [
+        {
+          "joinOperator": "join",
+          "sourceTable": "job",
+          "targetTable": "address",
+          "relationship": [["address_id", "id"]]
+        }
+      ],
+      "whereClause": [
+        {
+          "tableName": "job",
+          "column": "payment_type",
+          "filter": "=",
+          "value": "HOUR"
+        }
+      ],
+      "orderBy": [
+        {
+          "tableName": "job",
+          "column": "hourly_pay",
+          "orderOption": "desc"
+        }
+      ]
+    },
+    "expected": {
+      "query": "select job.id, job.name, job.hourly_pay\n    from job\n    join address on job.address_id = address.id\n    where job.payment_type = $1\n    \n    order by job.hourly_pay desc",
+      "values": ["HOUR"]
+    }
+  },
+  {
+    "testName": "building select query for job with WHERE, JOIN, ORDER BY and LIMIT",
+    "input": {
+      "selectColumns": ["job.id", "job.name"],
+      "fromTable": "job",
+      "joinClauses": [
+        {
+          "joinOperator": "join",
+          "sourceTable": "job",
+          "targetTable": "address",
+          "relationship": [["address_id", "id"]]
+        }
+      ],
+      "whereClause": [
+        {
+          "tableName": "job",
+          "column": "is_active",
+          "filter": "=",
+          "value": true
+        }
+      ],
+      "orderBy": [
+        {
+          "tableName": "job",
+          "column": "name",
+          "orderOption": "asc"
+        }
+      ],
+      "limit": 10
+    },
+    "expected": {
+      "query": "select job.id, job.name\n    from job\n    join address on job.address_id = address.id\n    where job.is_active = $1\n    \n    order by job.name asc\n    limit 10",
+      "values": [true]
+    }
+  }
+]
+

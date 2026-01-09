@@ -1,0 +1,138 @@
+[
+  {
+    "testName": "creating where options for address with id equals specific UUID",
+    "input": {
+      "id": { "equals": "123e4567-e89b-12d3-a456-426614174000" }
+    },
+    "expected": [
+      {
+        "tableName": "address",
+        "column": "id",
+        "filter": "=",
+        "value": "123e4567-e89b-12d3-a456-426614174000"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for address with city equals",
+    "input": {
+      "city": { "equals": "New York" }
+    },
+    "expected": [
+      {
+        "tableName": "address",
+        "column": "city",
+        "filter": "=",
+        "value": "New York"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for address with city like pattern",
+    "input": {
+      "city": { "like": "%York%" }
+    },
+    "expected": [
+      {
+        "tableName": "address",
+        "column": "city",
+        "filter": "like",
+        "value": "%York%"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for address with state in array",
+    "input": {
+      "state": { "in": ["NY", "CA", "TX"] }
+    },
+    "expected": [
+      {
+        "tableName": "address",
+        "column": "state",
+        "filter": "in",
+        "value": ["NY", "CA", "TX"]
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for address with zipCode not equals",
+    "input": {
+      "zipCode": { "notEquals": "10001" }
+    },
+    "expected": [
+      {
+        "tableName": "address",
+        "column": "zip_code",
+        "filter": "!=",
+        "value": "10001"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for address with aptNumber is null",
+    "input": {
+      "aptNumber": { "isNull": true }
+    },
+    "expected": [
+      {
+        "tableName": "address",
+        "column": "apt_number",
+        "filter": "is null",
+        "value": true
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for address with multiple filters",
+    "input": {
+      "city": { "equals": "San Francisco" },
+      "state": { "equals": "CA" },
+      "zipCode": { "like": "94%" }
+    },
+    "expected": [
+      {
+        "tableName": "address",
+        "column": "city",
+        "filter": "=",
+        "value": "San Francisco"
+      },
+      {
+        "tableName": "address",
+        "column": "state",
+        "filter": "=",
+        "value": "CA"
+      },
+      {
+        "tableName": "address",
+        "column": "zip_code",
+        "filter": "like",
+        "value": "94%"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for address with date range",
+    "input": {
+      "createdAt": {
+        "greaterThanEqualTo": "2024-01-01T00:00:00.000Z",
+        "lessThan": "2024-12-31T00:00:00.000Z"
+      }
+    },
+    "expected": [
+      {
+        "tableName": "address",
+        "column": "created_at",
+        "filter": ">=",
+        "value": "2024-01-01T00:00:00.000Z"
+      },
+      {
+        "tableName": "address",
+        "column": "created_at",
+        "filter": "<",
+        "value": "2024-12-31T00:00:00.000Z"
+      }
+    ]
+  }
+]
+

@@ -1,0 +1,104 @@
+[
+  {
+    "testName": "creating where options for user with id equals specific UUID",
+    "input": {
+      "id": { "equals": "123e4567-e89b-12d3-a456-426614174000" }
+    },
+    "expected": [
+      {
+        "tableName": "user",
+        "column": "id",
+        "filter": "=",
+        "value": "123e4567-e89b-12d3-a456-426614174000"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for user with firstName like pattern",
+    "input": {
+      "firstName": { "like": "%John%" }
+    },
+    "expected": [
+      {
+        "tableName": "user",
+        "column": "first_name",
+        "filter": "like",
+        "value": "%John%"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for user with email not equals",
+    "input": {
+      "email": { "notEquals": "spam@example.com" }
+    },
+    "expected": [
+      {
+        "tableName": "user",
+        "column": "email",
+        "filter": "!=",
+        "value": "spam@example.com"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for user with email in array",
+    "input": {
+      "email": { "in": ["user1@example.com", "user2@example.com", "user3@example.com"] }
+    },
+    "expected": [
+      {
+        "tableName": "user",
+        "column": "email",
+        "filter": "in",
+        "value": ["user1@example.com", "user2@example.com", "user3@example.com"]
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for user with date range",
+    "input": {
+      "createdAt": {
+        "greaterThanEqualTo": "2024-01-01T00:00:00.000Z",
+        "lessThan": "2024-12-31T00:00:00.000Z"
+      }
+    },
+    "expected": [
+      {
+        "tableName": "user",
+        "column": "created_at",
+        "filter": ">=",
+        "value": "2024-01-01T00:00:00.000Z"
+      },
+      {
+        "tableName": "user",
+        "column": "created_at",
+        "filter": "<",
+        "value": "2024-12-31T00:00:00.000Z"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options with nested address filter",
+    "input": {
+      "firstName": { "equals": "John" },
+      "address": {
+        "city": { "equals": "New York" }
+      }
+    },
+    "expected": [
+      {
+        "tableName": "user",
+        "column": "first_name",
+        "filter": "=",
+        "value": "John"
+      },
+      {
+        "tableName": "address",
+        "column": "city",
+        "filter": "=",
+        "value": "New York"
+      }
+    ]
+  }
+]

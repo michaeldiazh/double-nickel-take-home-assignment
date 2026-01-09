@@ -1,0 +1,210 @@
+[
+  {
+    "testName": "building basic select query for user",
+    "input": {
+      "selectColumns": ["id", "first_name", "email"],
+      "fromTable": "user"
+    },
+    "expected": {
+      "query": "select id, first_name, email\n    from user",
+      "values": []
+    }
+  },
+  {
+    "testName": "building select query for user with WHERE clause",
+    "input": {
+      "selectColumns": ["id", "first_name", "email"],
+      "fromTable": "user",
+      "whereClause": [
+        {
+          "tableName": "user",
+          "column": "email",
+          "filter": "=",
+          "value": "test@example.com"
+        }
+      ]
+    },
+    "expected": {
+      "query": "select id, first_name, email\n    from user\n    \n    where user.email = $1",
+      "values": ["test@example.com"]
+    }
+  },
+  {
+    "testName": "building select query for user with JOIN",
+    "input": {
+      "selectColumns": ["user.id", "user.first_name", "address.city"],
+      "fromTable": "user",
+      "joinClauses": [
+        {
+          "joinOperator": "join",
+          "sourceTable": "user",
+          "targetTable": "address",
+          "relationship": [["address_id", "id"]]
+        }
+      ]
+    },
+    "expected": {
+      "query": "select user.id, user.first_name, address.city\n    from user\n    join address on user.address_id = address.id",
+      "values": []
+    }
+  },
+  {
+    "testName": "building select query for user with ORDER BY",
+    "input": {
+      "selectColumns": ["id", "first_name", "email", "created_at"],
+      "fromTable": "user",
+      "orderBy": [
+        {
+          "tableName": "user",
+          "column": "created_at",
+          "orderOption": "desc"
+        }
+      ]
+    },
+    "expected": {
+      "query": "select id, first_name, email, created_at\n    from user\n    \n    \n    \n    order by user.created_at desc",
+      "values": []
+    }
+  },
+  {
+    "testName": "building select query for user with LIMIT and OFFSET",
+    "input": {
+      "selectColumns": ["id", "first_name", "email"],
+      "fromTable": "user",
+      "limit": 10,
+      "offset": 20
+    },
+    "expected": {
+      "query": "select id, first_name, email\n    from user\n    \n    \n    \n    \n    limit 10\n    offset 20",
+      "values": []
+    }
+  },
+  {
+    "testName": "building select query for user with WHERE and ORDER BY",
+    "input": {
+      "selectColumns": ["id", "first_name", "email"],
+      "fromTable": "user",
+      "whereClause": [
+        {
+          "tableName": "user",
+          "column": "first_name",
+          "filter": "=",
+          "value": "John"
+        }
+      ],
+      "orderBy": [
+        {
+          "tableName": "user",
+          "column": "created_at",
+          "orderOption": "asc"
+        }
+      ]
+    },
+    "expected": {
+      "query": "select id, first_name, email\n    from user\n    \n    where user.first_name = $1\n    \n    order by user.created_at asc",
+      "values": ["John"]
+    }
+  },
+  {
+    "testName": "building select query for user with JOIN, WHERE, and ORDER BY",
+    "input": {
+      "selectColumns": ["user.id", "user.first_name", "address.city", "address.state"],
+      "fromTable": "user",
+      "joinClauses": [
+        {
+          "joinOperator": "left join",
+          "sourceTable": "user",
+          "targetTable": "address",
+          "relationship": [["address_id", "id"]]
+        }
+      ],
+      "whereClause": [
+        {
+          "tableName": "user",
+          "column": "email",
+          "filter": "like",
+          "value": "%example.com"
+        }
+      ],
+      "orderBy": [
+        {
+          "tableName": "user",
+          "column": "created_at",
+          "orderOption": "desc"
+        }
+      ]
+    },
+    "expected": {
+      "query": "select user.id, user.first_name, address.city, address.state\n    from user\n    left join address on user.address_id = address.id\n    where user.email like $1\n    \n    order by user.created_at desc",
+      "values": ["%example.com"]
+    }
+  },
+  {
+    "testName": "building select query for user with GROUP BY",
+    "input": {
+      "selectColumns": ["state", "count(*) as user_count"],
+      "fromTable": "user",
+      "joinClauses": [
+        {
+          "joinOperator": "join",
+          "sourceTable": "user",
+          "targetTable": "address",
+          "relationship": [["address_id", "id"]]
+        }
+      ],
+      "groupBy": [
+        {
+          "tableName": "address",
+          "column": "state"
+        }
+      ]
+    },
+    "expected": {
+      "query": "select state, count(*) as user_count\n    from user\n    join address on user.address_id = address.id\n    \n    group by address.state",
+      "values": []
+    }
+  },
+  {
+    "testName": "building select query for user with all options",
+    "input": {
+      "selectColumns": ["user.id", "user.first_name", "address.city"],
+      "fromTable": "user",
+      "joinClauses": [
+        {
+          "joinOperator": "join",
+          "sourceTable": "user",
+          "targetTable": "address",
+          "relationship": [["address_id", "id"]]
+        }
+      ],
+      "whereClause": [
+        {
+          "tableName": "user",
+          "column": "first_name",
+          "filter": "=",
+          "value": "John"
+        }
+      ],
+      "groupBy": [
+        {
+          "tableName": "address",
+          "column": "city"
+        }
+      ],
+      "orderBy": [
+        {
+          "tableName": "address",
+          "column": "city",
+          "orderOption": "asc"
+        }
+      ],
+      "limit": 50,
+      "offset": 0
+    },
+    "expected": {
+      "query": "select user.id, user.first_name, address.city\n    from user\n    join address on user.address_id = address.id\n    where user.first_name = $1\n    group by address.city\n    order by address.city asc\n    limit 50",
+      "values": ["John"]
+    }
+  }
+]
+

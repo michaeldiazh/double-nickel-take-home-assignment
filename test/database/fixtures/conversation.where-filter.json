@@ -1,0 +1,179 @@
+[
+  {
+    "testName": "creating where options for conversation with id equals specific UUID",
+    "input": {
+      "id": { "equals": "123e4567-e89b-12d3-a456-426614174000" }
+    },
+    "expected": [
+      {
+        "tableName": "conversation",
+        "column": "id",
+        "filter": "=",
+        "value": "123e4567-e89b-12d3-a456-426614174000"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for conversation with isActive equals true",
+    "input": {
+      "isActive": { "equals": true }
+    },
+    "expected": [
+      {
+        "tableName": "conversation",
+        "column": "is_active",
+        "filter": "=",
+        "value": true
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for conversation with screeningDecision equals",
+    "input": {
+      "screeningDecision": { "equals": "APPROVED" }
+    },
+    "expected": [
+      {
+        "tableName": "conversation",
+        "column": "screening_decision",
+        "filter": "=",
+        "value": "APPROVED"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for conversation with screeningDecision in array",
+    "input": {
+      "screeningDecision": { "in": ["APPROVED", "DENIED"] }
+    },
+    "expected": [
+      {
+        "tableName": "conversation",
+        "column": "screening_decision",
+        "filter": "in",
+        "value": ["APPROVED", "DENIED"]
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for conversation with screeningSummary like pattern",
+    "input": {
+      "screeningSummary": { "like": "%qualified%" }
+    },
+    "expected": [
+      {
+        "tableName": "conversation",
+        "column": "screening_summary",
+        "filter": "like",
+        "value": "%qualified%"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for conversation with endedAt is null",
+    "input": {
+      "endedAt": { "isNull": true }
+    },
+    "expected": [
+      {
+        "tableName": "conversation",
+        "column": "ended_at",
+        "filter": "is null",
+        "value": true
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for conversation with multiple filters",
+    "input": {
+      "isActive": { "equals": true },
+      "screeningDecision": { "equals": "PENDING" }
+    },
+    "expected": [
+      {
+        "tableName": "conversation",
+        "column": "is_active",
+        "filter": "=",
+        "value": true
+      },
+      {
+        "tableName": "conversation",
+        "column": "screening_decision",
+        "filter": "=",
+        "value": "PENDING"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for conversation with nested application filter",
+    "input": {
+      "isActive": { "equals": true },
+      "application": {
+        "status": { "equals": "IN_PROGRESS" }
+      }
+    },
+    "expected": [
+      {
+        "tableName": "conversation",
+        "column": "is_active",
+        "filter": "=",
+        "value": true
+      },
+      {
+        "tableName": "application",
+        "column": "status",
+        "filter": "=",
+        "value": "IN_PROGRESS"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for conversation with nested application user filter",
+    "input": {
+      "screeningDecision": { "equals": "APPROVED" },
+      "application": {
+        "user": {
+          "email": { "equals": "user@example.com" }
+        }
+      }
+    },
+    "expected": [
+      {
+        "tableName": "conversation",
+        "column": "screening_decision",
+        "filter": "=",
+        "value": "APPROVED"
+      },
+      {
+        "tableName": "user",
+        "column": "email",
+        "filter": "=",
+        "value": "user@example.com"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for conversation with date range",
+    "input": {
+      "createdAt": {
+        "greaterThanEqualTo": "2024-01-01T00:00:00.000Z",
+        "lessThan": "2024-12-31T00:00:00.000Z"
+      }
+    },
+    "expected": [
+      {
+        "tableName": "conversation",
+        "column": "created_at",
+        "filter": ">=",
+        "value": "2024-01-01T00:00:00.000Z"
+      },
+      {
+        "tableName": "conversation",
+        "column": "created_at",
+        "filter": "<",
+        "value": "2024-12-31T00:00:00.000Z"
+      }
+    ]
+  }
+]
+

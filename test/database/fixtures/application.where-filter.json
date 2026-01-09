@@ -1,0 +1,228 @@
+[
+  {
+    "testName": "creating where options for application with id equals specific UUID",
+    "input": {
+      "id": {
+        "equals": "123e4567-e89b-12d3-a456-426614174000"
+      }
+    },
+    "expected": [
+      {
+        "tableName": "application",
+        "column": "id",
+        "filter": "=",
+        "value": "123e4567-e89b-12d3-a456-426614174000"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for application with status equals",
+    "input": {
+      "status": {
+        "equals": "SUBMITTED"
+      }
+    },
+    "expected": [
+      {
+        "tableName": "application",
+        "column": "status",
+        "filter": "=",
+        "value": "SUBMITTED"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for application with status in array",
+    "input": {
+      "status": {
+        "in": [
+          "SUBMITTED",
+          "IN_PROGRESS",
+          "HIRED"
+        ]
+      }
+    },
+    "expected": [
+      {
+        "tableName": "application",
+        "column": "status",
+        "filter": "in",
+        "value": [
+          "SUBMITTED",
+          "IN_PROGRESS",
+          "HIRED"
+        ]
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for application with appliedOn date range",
+    "input": {
+      "appliedOn": {
+        "greaterThanEqualTo": "2024-01-01T00:00:00.000Z",
+        "lessThan": "2024-12-31T00:00:00.000Z"
+      }
+    },
+    "expected": [
+      {
+        "tableName": "application",
+        "column": "applied_on",
+        "filter": ">=",
+        "value": "2024-01-01T00:00:00.000Z"
+      },
+      {
+        "tableName": "application",
+        "column": "applied_on",
+        "filter": "<",
+        "value": "2024-12-31T00:00:00.000Z"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for application with multiple filters",
+    "input": {
+      "status": {
+        "equals": "IN_PROGRESS"
+      },
+      "appliedOn": {
+        "greaterThan": "2024-06-01T00:00:00.000Z"
+      }
+    },
+    "expected": [
+      {
+        "tableName": "application",
+        "column": "applied_on",
+        "filter": ">",
+        "value": "2024-06-01T00:00:00.000Z"
+      },
+      {
+        "tableName": "application",
+        "column": "status",
+        "filter": "=",
+        "value": "IN_PROGRESS"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for application with nested user filter",
+    "input": {
+      "status": {
+        "equals": "SUBMITTED"
+      },
+      "user": {
+        "email": {
+          "equals": "user@example.com"
+        }
+      }
+    },
+    "expected": [
+      {
+        "tableName": "application",
+        "column": "status",
+        "filter": "=",
+        "value": "SUBMITTED"
+      },
+      {
+        "tableName": "user",
+        "column": "email",
+        "filter": "=",
+        "value": "user@example.com"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for application with nested job filter",
+    "input": {
+      "status": {
+        "equals": "IN_PROGRESS"
+      },
+      "job": {
+        "name": {
+          "like": "%Engineer%"
+        }
+      }
+    },
+    "expected": [
+      {
+        "tableName": "application",
+        "column": "status",
+        "filter": "=",
+        "value": "IN_PROGRESS"
+      },
+      {
+        "tableName": "job",
+        "column": "name",
+        "filter": "like",
+        "value": "%Engineer%"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for application with nested user and job filters",
+    "input": {
+      "user": {
+        "firstName": {
+          "equals": "John"
+        }
+      },
+      "job": {
+        "isActive": {
+          "equals": true
+        }
+      }
+    },
+    "expected": [
+      {
+        "tableName": "user",
+        "column": "first_name",
+        "filter": "=",
+        "value": "John"
+      },
+      {
+        "tableName": "job",
+        "column": "is_active",
+        "filter": "=",
+        "value": true
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for application with date range and nested filters",
+    "input": {
+      "appliedOn": {
+        "greaterThanEqualTo": "2024-01-01T00:00:00.000Z"
+      },
+      "user": {
+        "email": {
+          "like": "%@example.com"
+        }
+      },
+      "job": {
+        "paymentType": {
+          "equals": "HOUR"
+        }
+      }
+    },
+    "expected": [
+      {
+        "tableName": "application",
+        "column": "applied_on",
+        "filter": ">=",
+        "value": "2024-01-01T00:00:00.000Z"
+      },
+      {
+        "tableName": "user",
+        "column": "email",
+        "filter": "like",
+        "value": "%@example.com"
+      },
+      {
+        "tableName": "job",
+        "column": "payment_type",
+        "filter": "=",
+        "value": "HOUR"
+      }
+    ]
+  }
+]
+

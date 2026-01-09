@@ -1,0 +1,33 @@
+[
+  {
+    "testName": "building join clause for conversation to application with single relationship",
+    "input": {
+      "joinOperator": "join",
+      "sourceTable": "conversation",
+      "targetTable": "application",
+      "relationship": [["app_id", "id"]]
+    },
+    "expected": "join application on conversation.app_id = application.id"
+  },
+  {
+    "testName": "building left join clause for conversation to application",
+    "input": {
+      "joinOperator": "left join",
+      "sourceTable": "conversation",
+      "targetTable": "application",
+      "relationship": [["app_id", "id"]]
+    },
+    "expected": "left join application on conversation.app_id = application.id"
+  },
+  {
+    "testName": "building right join clause for conversation to application",
+    "input": {
+      "joinOperator": "right join",
+      "sourceTable": "conversation",
+      "targetTable": "application",
+      "relationship": [["app_id", "id"]]
+    },
+    "expected": "right join application on conversation.app_id = application.id"
+  }
+]
+

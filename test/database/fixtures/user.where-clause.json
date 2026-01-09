@@ -1,0 +1,161 @@
+[
+  {
+    "testName": "building where clause for user with single condition",
+    "input": [
+      {
+        "tableName": "user",
+        "column": "email",
+        "filter": "=",
+        "value": "test@example.com"
+      }
+    ],
+    "expected": {
+      "clause": "where user.email = $1",
+      "values": ["test@example.com"]
+    }
+  },
+  {
+    "testName": "building where clause for user with multiple AND conditions",
+    "input": [
+      {
+        "tableName": "user",
+        "column": "first_name",
+        "filter": "=",
+        "value": "John"
+      },
+      {
+        "tableName": "user",
+        "column": "email",
+        "filter": "like",
+        "value": "%example.com"
+      }
+    ],
+    "expected": {
+      "clause": "where user.first_name = $1 and user.email like $2",
+      "values": ["John", "%example.com"]
+    }
+  },
+  {
+    "testName": "building where clause for user with IN operator",
+    "input": [
+      {
+        "tableName": "user",
+        "column": "email",
+        "filter": "in",
+        "value": ["user1@example.com", "user2@example.com", "user3@example.com"]
+      }
+    ],
+    "expected": {
+      "clause": "where user.email in ($1, $2, $3)",
+      "values": ["user1@example.com", "user2@example.com", "user3@example.com"]
+    }
+  },
+  {
+    "testName": "building where clause for user with IS NULL operator",
+    "input": [
+      {
+        "tableName": "user",
+        "column": "last_logged_in",
+        "filter": "is null"
+      }
+    ],
+    "expected": {
+      "clause": "where user.last_logged_in is null",
+      "values": []
+    }
+  },
+  {
+    "testName": "building where clause for user with date range",
+    "input": [
+      {
+        "tableName": "user",
+        "column": "created_at",
+        "filter": ">=",
+        "value": "2024-01-01T00:00:00.000Z"
+      },
+      {
+        "tableName": "user",
+        "column": "created_at",
+        "filter": "<",
+        "value": "2024-12-31T00:00:00.000Z"
+      }
+    ],
+    "expected": {
+      "clause": "where user.created_at >= $1 and user.created_at < $2",
+      "values": ["2024-01-01T00:00:00.000Z", "2024-12-31T00:00:00.000Z"]
+    }
+  },
+  {
+    "testName": "building where clause for user with OR composition",
+    "input": {
+      "compositionOption": "or",
+      "whereOptions": [
+        {
+          "tableName": "user",
+          "column": "first_name",
+          "filter": "=",
+          "value": "John"
+        },
+        {
+          "tableName": "user",
+          "column": "email",
+          "filter": "like",
+          "value": "%admin%"
+        }
+      ]
+    },
+    "expected": {
+      "clause": "(user.first_name = $1 or user.email like $2)",
+      "values": ["John", "%admin%"]
+    }
+  },
+  {
+    "testName": "building where clause for user with AND composition",
+    "input": {
+      "compositionOption": "and",
+      "whereOptions": [
+        {
+          "tableName": "user",
+          "column": "first_name",
+          "filter": "=",
+          "value": "John"
+        },
+        {
+          "tableName": "user",
+          "column": "last_name",
+          "filter": "=",
+          "value": "Doe"
+        }
+      ]
+    },
+    "expected": {
+      "clause": "(user.first_name = $1 and user.last_name = $2)",
+      "values": ["John", "Doe"]
+    }
+  },
+  {
+    "testName": "building where clause for user with complex OR composition and multiple values",
+    "input": {
+      "compositionOption": "or",
+      "whereOptions": [
+        {
+          "tableName": "user",
+          "column": "email",
+          "filter": "in",
+          "value": ["admin@example.com", "superuser@example.com"]
+        },
+        {
+          "tableName": "user",
+          "column": "first_name",
+          "filter": "=",
+          "value": "Admin"
+        }
+      ]
+    },
+    "expected": {
+      "clause": "(user.email in ($1, $2) or user.first_name = $3)",
+      "values": ["admin@example.com", "superuser@example.com", "Admin"]
+    }
+  }
+]
+

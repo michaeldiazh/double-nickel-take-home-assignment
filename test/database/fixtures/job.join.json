@@ -1,0 +1,46 @@
+[
+  {
+    "testName": "building join clause for job to address with single relationship",
+    "input": {
+      "joinOperator": "join",
+      "sourceTable": "job",
+      "targetTable": "address",
+      "relationship": [["address_id", "id"]]
+    },
+    "expected": "join address on job.address_id = address.id"
+  },
+  {
+    "testName": "building left join clause for job to address",
+    "input": {
+      "joinOperator": "left join",
+      "sourceTable": "job",
+      "targetTable": "address",
+      "relationship": [["address_id", "id"]]
+    },
+    "expected": "left join address on job.address_id = address.id"
+  },
+  {
+    "testName": "building right join clause for job to address",
+    "input": {
+      "joinOperator": "right join",
+      "sourceTable": "job",
+      "targetTable": "address",
+      "relationship": [["address_id", "id"]]
+    },
+    "expected": "right join address on job.address_id = address.id"
+  },
+  {
+    "testName": "building join clause with composite key relationship",
+    "input": {
+      "joinOperator": "join",
+      "sourceTable": "job",
+      "targetTable": "address",
+      "relationship": [
+        ["address_id", "id"],
+        ["name", "city"]
+      ]
+    },
+    "expected": "join address on job.address_id = address.id and job.name = address.city"
+  }
+]
+

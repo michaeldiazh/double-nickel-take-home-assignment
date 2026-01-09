@@ -1,0 +1,103 @@
+[
+  {
+    "testName": "creating where options for job-requirement-type with id equals",
+    "input": {
+      "id": { "equals": 1 }
+    },
+    "expected": [
+      {
+        "tableName": "job_requirement_type",
+        "column": "id",
+        "filter": "=",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for job-requirement-type with requirementType equals",
+    "input": {
+      "requirementType": { "equals": "EXPERIENCE" }
+    },
+    "expected": [
+      {
+        "tableName": "job_requirement_type",
+        "column": "requirement_type",
+        "filter": "=",
+        "value": "EXPERIENCE"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for job-requirement-type with requirementType in array",
+    "input": {
+      "requirementType": { "in": ["EXPERIENCE", "EDUCATION", "CERTIFICATION"] }
+    },
+    "expected": [
+      {
+        "tableName": "job_requirement_type",
+        "column": "requirement_type",
+        "filter": "in",
+        "value": ["EXPERIENCE", "EDUCATION", "CERTIFICATION"]
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for job-requirement-type with requirementDescription like pattern",
+    "input": {
+      "requirementDescription": { "like": "%years%" }
+    },
+    "expected": [
+      {
+        "tableName": "job_requirement_type",
+        "column": "requirement_description",
+        "filter": "like",
+        "value": "%years%"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for job-requirement-type with multiple filters",
+    "input": {
+      "requirementType": { "equals": "EXPERIENCE" },
+      "id": { "greaterThan": 5 }
+    },
+    "expected": [
+      {
+        "tableName": "job_requirement_type",
+        "column": "id",
+        "filter": ">",
+        "value": 5
+      },
+      {
+        "tableName": "job_requirement_type",
+        "column": "requirement_type",
+        "filter": "=",
+        "value": "EXPERIENCE"
+      }
+    ]
+  },
+  {
+    "testName": "creating where options for job-requirement-type with date range",
+    "input": {
+      "createdAt": {
+        "greaterThanEqualTo": "2024-01-01T00:00:00.000Z",
+        "lessThan": "2024-12-31T00:00:00.000Z"
+      }
+    },
+    "expected": [
+      {
+        "tableName": "job_requirement_type",
+        "column": "created_at",
+        "filter": ">=",
+        "value": "2024-01-01T00:00:00.000Z"
+      },
+      {
+        "tableName": "job_requirement_type",
+        "column": "created_at",
+        "filter": "<",
+        "value": "2024-12-31T00:00:00.000Z"
+      }
+    ]
+  }
+]
+
