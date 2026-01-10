@@ -15,7 +15,7 @@ import PhysicalExamParserContext from './physical-exam/';
 import DrugTestParserContext from './drug-test/';
 import BackgroundCheckParserContext from './background-check/';
 import GeographicRestrictionParserContext from './geographic-restriction/';
-import {buildFailureParseResult, buildSuccessParseResult, extractValueFromPayload} from "./utils";
+import {buildFailureParseResult, buildSuccessParseResult, extractValueFromPayload, extractAssessmentAndConfidence} from "./utils";
 
 /**
  * Map of requirement types to their parser contexts.
@@ -33,24 +33,29 @@ const parserContextMap: Record<JobRequirementType, ParserContext<any>> = {
 };
 
 /**
- * Extracts a value from content using a parser context.
- * Tries JSON extraction first, then falls back to text extraction.
+ * Extracts a value, assessment, and confidence from content using a parser context.
+ * Tries JSON extraction first (preferred), then falls back to text extraction.
+ * JSON extraction is always attempted and preferred if available (more structured/validated).
+ * Assessment and confidence are extracted from both JSON and text responses.
  */
 const extractValue = <T extends ConversationRequirementValue>(content: string, parserContext: ParserContext<T>): ParseResult<T> => {
     const {valueSchema} = parserContext;
     
-    // Try to extract from JSON payload first
+    // Extract assessment and confidence from content (may be in JSON or text)
+    const {assessment, confidence} = extractAssessmentAndConfidence(content);
+    
+    // Always try to extract from JSON payload first (more structured and validated)
     const jsonResult = extractValueFromPayload(content, valueSchema);
     if (jsonResult) {
-        return buildSuccessParseResult(jsonResult);
+        return buildSuccessParseResult(jsonResult, assessment, confidence);
     }
     
-    // Try to extract from natural language text
+    // Try to extract from natural language text as fallback
     const textResult = parserContext.extractValueFromText(content);
     if (textResult) {
-        return buildSuccessParseResult(textResult);
+        return buildSuccessParseResult(textResult, assessment, confidence);
     }
-    
+
     // Both methods failed
     return buildFailureParseResult(parserContext.notParsableErrorMessage);
 };
@@ -73,6 +78,8 @@ export const parseLLMResponse = <T extends ConversationRequirementValue>(
             value: null,
             error: `Unsupported requirement type: ${requirementType}`,
             needsClarification: true,
+            assessment: null,
+            confidence: null,
         };
     }
 
