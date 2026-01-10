@@ -56,6 +56,36 @@ export interface HandlerResponse {
 }
 
 /**
+ * Request to start a new conversation.
+ */
+export interface StartConversationRequest {
+  /**
+   * The application ID to start the conversation for
+   */
+  applicationId: string;
+}
+
+/**
+ * Response from starting a new conversation.
+ */
+export interface StartConversationResponse {
+  /**
+   * The created conversation ID
+   */
+  conversationId: string;
+  
+  /**
+   * The initial greeting message from the assistant
+   */
+  greetingMessage: string;
+  
+  /**
+   * The conversation context (START status)
+   */
+  context: ConversationContext;
+}
+
+/**
  * Result of starting a new conversation context.
  * Contains the conversation ID and the START conversation context.
  */

@@ -16,8 +16,9 @@ import { conversationSchema } from '../../../entities/conversation/domain';
 import { jobRequirementsSchema } from '../../../entities/job-requirements/domain';
 import { simplifiedApplicationSchema } from '../../../entities/application/domain';
 import { jobFactsSchema } from '../../../entities/job-facts/domain';
-import { ConversationRequirements, JobFacts } from '../../../entities';
+import { ConversationRequirements, JobFacts, JobRequirements, RequirementStatus } from '../../../entities';
 import { ChatMessage, MessageRole } from '../client';
+import { ConversationContext } from '../processor/prompts/prompt-context';
 
 /**
  * Loads basic conversation data needed for context building.
@@ -229,5 +230,127 @@ export const loadJobFacts = async (
   });
 
   return validated.job_facts;
+};
+
+/**
+ * Helper function to build a ConversationContext when all requirements are completed.
+ * Determines whether the conversation is DONE (all requirements evaluated) or ON_JOB_QUESTIONS.
+ * 
+ * @param userFirstName - The user's first name
+ * @param jobTitle - The job title
+ * @param jobFacts - Array of job facts
+ * @param messageHistory - Array of chat messages
+ * @param requirements - Array of job requirements
+ * @param conversationRequirements - Array of conversation requirements with status
+ * @returns ConversationContext with DONE or ON_JOB_QUESTIONS status
+ */
+const buildCompletedRequirementsContext = (
+  userFirstName: string,
+  jobTitle: string,
+  jobFacts: JobFacts[],
+  messageHistory: ChatMessage[],
+  requirements: JobRequirements[],
+  conversationRequirements: ConversationRequirements[]
+): ConversationContext => {
+  // All requirements are completed, use the last one as current
+  const currentRequirement = requirements[requirements.length - 1];
+  
+  // Determine status: if all are completed, status is DONE
+  const allCompleted = conversationRequirements.every(
+    cr => cr.status === RequirementStatus.MET || cr.status === RequirementStatus.NOT_MET
+  );
+  
+  return {
+    status: allCompleted ? 'DONE' : 'ON_JOB_QUESTIONS',
+    userFirstName,
+    jobTitle,
+    jobFacts,
+    messageHistory,
+    requirements,
+    conversationRequirements,
+    currentRequirement,
+  };
+};
+
+/**
+ * Loads full conversation context from a conversation ID.
+ * Used when context is not found in cache (cache miss scenario).
+ * 
+ * This function:
+ * 1. Loads basic conversation data (to get appId)
+ * 2. Loads user firstName from appId
+ * 3. Loads job info (jobId, jobTitle) from appId
+ * 4. Loads messages for the conversation
+ * 5. Loads conversation requirements with nested job requirements
+ * 6. Loads job facts for the job
+ * 7. Builds and returns ConversationContext
+ * 
+ * @param conversationId - The UUID of the conversation
+ * @returns Promise resolving to ConversationContext or null if conversation not found
+ */
+export const loadFullContextFromConversationId = async (
+  conversationId: string
+): Promise<ConversationContext | null> => {
+  // 1. Load basic conversation data (to get appId)
+  const basicData = await loadConversationBasic(conversationId);
+  if (!basicData) {
+    return null;
+  }
+  const { appId } = basicData;
+  
+  // 2. Load user firstName and job info in parallel
+  const [userFirstName, jobInfo] = await Promise.all([loadUserFirstName(appId), loadJobInfo(appId)]);
+  
+  if (!userFirstName || !jobInfo) {
+    throw new Error(`Failed to load user or job data for conversation ${conversationId}`);
+  }
+  
+  const { jobId, jobTitle } = jobInfo;
+  
+  // 3. Load messages, conversation requirements, and job facts in parallel
+  const [messageHistory, conversationRequirements, jobFacts] = await Promise.all([loadMessages(conversationId), loadConversationRequirements(conversationId), loadJobFacts(jobId)]);
+  
+  // 4. Build ConversationContext
+  // Extract requirements from conversationRequirements
+  const requirements = conversationRequirements.map(cr => cr.jobRequirements);
+  
+  // Determine current requirement (first PENDING requirement, ordered by priority)
+  const pendingRequirement = conversationRequirements.find(
+    cr => cr.status === RequirementStatus.PENDING
+  );
+  
+  if (!pendingRequirement && requirements.length > 0) {
+    return buildCompletedRequirementsContext(
+      userFirstName,
+      jobTitle,
+      jobFacts,
+      messageHistory,
+      requirements,
+      conversationRequirements
+    );
+  }
+  
+  if (!pendingRequirement || requirements.length === 0) {
+    throw new Error(`No requirements found for conversation ${conversationId}`);
+  }
+  
+  const currentRequirement = pendingRequirement.jobRequirements;
+  
+  // Determine status based on context
+  // If messageHistory is empty and currentRequirement is first, status is START
+  // Otherwise, if we have a pending requirement, status is ON_REQ
+  const isStart = messageHistory.length === 0 && 
+    conversationRequirements[0].jobRequirements.id === currentRequirement.id;
+  
+  return {
+    status: isStart ? 'START' : 'ON_REQ',
+    userFirstName,
+    jobTitle,
+    jobFacts,
+    messageHistory,
+    requirements,
+    conversationRequirements,
+    currentRequirement,
+  };
 };
 
