@@ -1,34 +1,33 @@
 import { pool } from '../../database/connection';
 import { RequirementsCache } from './cache/interface';
-import { JobRequirementWithType } from './types';
+import { JobRequirements } from '../../entities/job-requirements';
 import { z } from 'zod';
 import {
   buildJobIdFromConversationQuery,
   buildRequirementsByJobIdQuery,
   buildTopXActiveJobsQuery,
 } from './builder/requirements-query';
+import { jobShape } from '../../entities/job/domain';
+import { jobRequirementTypeShape } from '../../entities/job-requirement-type/domain';
+import { jobRequirementsShape } from '../../entities/job-requirements/domain';
 
 /**
- * Zod schema for JobRequirementWithType as returned from PostgreSQL JSON functions.
+ * Zod schema for JobRequirements as returned from PostgreSQL JSON functions.
+ * Dates are returned as strings from PostgreSQL, so we need to coerce them.
  */
-const jobRequirementWithTypeSchema: z.ZodType<JobRequirementWithType> = z.object({
-  id: z.uuidv4(),
-  jobId: z.uuidv4(),
-  requirementTypeId: z.number().int().positive(),
-  criteria: z.record(z.string(), z.unknown()),
-  priority: z.number().int(),
-  requirementType: z.object({
-    id: z.number().int().positive(),
-    requirementType: z.string().max(50),
-    requirementDescription: z.string(),
-  }),
-});
+const jobRequirementsQuerySchema: z.ZodType<JobRequirements> = z.object({
+  ...jobRequirementsShape,
+  job: z.object(jobShape),
+  jobRequirementType: z.object(jobRequirementTypeShape),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+}).omit({ jobId: true, requirementTypeId: true });
 
 /**
- * Schema for the query result - returns a JSON array of JobRequirementWithType.
+ * Schema for the query result - returns a JSON array of JobRequirements.
  */
 const jobRequirementsQueryResultSchema = z.object({
-  requirements: z.array(jobRequirementWithTypeSchema),
+  requirements: z.array(jobRequirementsQuerySchema),
 });
 
 /**
@@ -40,12 +39,12 @@ const jobRequirementsQueryResultSchema = z.object({
  * 
  * @param cache - The requirements cache instance
  * @param conversationId - The UUID of the conversation
- * @returns Promise resolving to job requirements with their types, or null if not found
+ * @returns Promise resolving to job requirements with full entity objects, or null if not found
  */
 export const loadRequirementsByConversationId = async (
   cache: RequirementsCache,
   conversationId: string
-): Promise<JobRequirementWithType[] | null> => {
+): Promise<JobRequirements[] | null> => {
   // Get job_id from conversation via application
   const { query, values } = buildJobIdFromConversationQuery(conversationId);
 
@@ -67,12 +66,12 @@ export const loadRequirementsByConversationId = async (
  * 
  * @param cache - The requirements cache instance
  * @param jobId - The UUID of the job
- * @returns Promise resolving to job requirements with their types, or null if not found
+ * @returns Promise resolving to job requirements with full entity objects, or null if not found
  */
 export const loadRequirementsByJobId = async (
   cache: RequirementsCache,
   jobId: string
-): Promise<JobRequirementWithType[] | null> => {
+): Promise<JobRequirements[] | null> => {
   // Check cache first
   const cached = await cache.get(jobId);
   if (cached) {
@@ -94,14 +93,14 @@ export const loadRequirementsByJobId = async (
 
 /**
  * Loads job requirements from the database for a given job ID.
- * Joins with job_requirement_type to get requirement type information.
+ * Joins with job_requirement_type and job to get full entity information.
  * 
  * @param jobId - The UUID of the job
- * @returns Promise resolving to job requirements with their types
+ * @returns Promise resolving to job requirements with full entity objects
  */
 const loadRequirementsFromDatabase = async (
   jobId: string
-): Promise<JobRequirementWithType[]> => {
+): Promise<JobRequirements[]> => {
   const { query, values } = buildRequirementsByJobIdQuery(jobId);
 
   const result = await pool.query(query, values);

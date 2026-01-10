@@ -345,6 +345,6 @@ export const createOpenAIClient = (config: OpenAIClientConfig): LLMClient => {
     }
   };
 
-  return { sendMessage, streamMessage };
+  return { model, sendMessage, streamMessage };
 };
 

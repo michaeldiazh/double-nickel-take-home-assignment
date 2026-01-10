@@ -1,117 +1,121 @@
-import { ConversationContext, buildConversationContextMessage } from './prompt-context';
-import { buildSystemPrompt } from './system-prompt';
-import { ChatMessage, MessageRole } from '../../client/types';
-import { buildSystemMessageWithRequirement } from './message-builders';
+import {ConversationContext} from './prompt-context';
+import {ChatMessage, MessageRole} from '../../client';
+import {buildIntroductionSystemPromptMessage} from './message-builders';
+import {SimplifiedJobRequirementType} from "../../../../entities";
+import {buildSystemMessage} from "./message-builders/message";
+import {buildRequirementFollowUpSystemPromptMessage} from "./message-builders/follow-up";
+import {buildSystemContextMessage} from "./message-builders/context";
+import {buildJobFactsSystemPromptMessage} from "./message-builders/job-facts";
+import {buildCompletionSystemPromptMessage} from "./message-builders/complete";
+import {buildRequirementSystemMessage} from "./message-builders/requirements";
 
+type PromptFunction = (context: ConversationContext) => ChatMessage[];
 /**
  * Gets a human-readable description for a requirement type.
  * Uses the requirementDescription from the job requirement type, with a fallback.
- * 
+ *
  * @param requirementType - The SimplifiedJobRequirementType object
  * @returns Human-readable description
  */
 export const getRequirementDescription = (
-  requirementType: { requirementDescription: string; requirementType: string }
+    requirementType: SimplifiedJobRequirementType
 ): string => {
-  return requirementType.requirementDescription || requirementType.requirementType.toLowerCase().replace(/_/g, ' ');
+    return requirementType.requirementDescription || requirementType.requirementType.toLowerCase().replace(/_/g, ' ');
 };
 
 /**
  * Builds the initial prompt for a new conversation.
  * This is sent when the conversation is first created (no user message yet).
- * 
- * @param jobTitle - The job title
- * @param companyName - The company name
- * @param jobLocation - Optional job location
- * @param requirements - All job requirements
+ *
+ * @param context - The conversation context (job title)
  * @returns Array of ChatMessage objects (System + Assistant greeting)
  */
-const COMPANY_NAME = 'Happy Hauler Trucking Co';
-
 export const buildInitialPrompt = (
-  jobTitle: string,
-  jobLocation: string | undefined
+    context: ConversationContext
 ): ChatMessage[] => {
-  const systemPrompt = buildSystemPrompt(jobTitle);
-  // Build assistant greeting that introduces the process and asks first question
-  // Match the challenge example tone: "Hi, I'm the Happy Hauler recruiting assistant..."
-  const assistantGreeting = `Hi, I'm the ${COMPANY_NAME} recruiting assistant. Thanks for your interest in our ${jobTitle} position. Can I ask you a few quick questions about your qualifications for this position?`;
-  
-  // Note: The first question will be asked after the user responds "Yes" or similar
-  // This matches the challenge flow where the assistant greets first, then asks questions
-
-  return [
-    {
-      role: MessageRole.SYSTEM,
-      content: systemPrompt,
-    },
-    {
-      role: MessageRole.ASSISTANT,
-      content: assistantGreeting,
-    },
-  ];
+    const systemPrompt = buildIntroductionSystemPromptMessage(context);
+    return [buildSystemMessage(systemPrompt)];
 };
 
+
+const buildRequirementSystemMessagePrompt = (
+    context: ConversationContext
+): ChatMessage[] => {
+    const {jobTitle, currentRequirement} = context;
+    const nextRequirementMessage = buildRequirementSystemMessage(jobTitle, currentRequirement);
+    const contextString = buildSystemContextMessage(context);
+    const nextRequirementPrompt = buildSystemMessage(nextRequirementMessage);
+    const contextPrompt = buildSystemMessage(contextString);
+    return [...context.messageHistory, contextPrompt, nextRequirementPrompt];
+}
+
+const buildFollowUpRequirementPrompt = (
+    context: ConversationContext,
+): ChatMessage[] => {
+    const {requirementType} = context.currentRequirement.jobRequirementType
+    const clarificationNeeded = context.clarificationNeeded!;
+    const {jobTitle} = context
+    const contextString = buildSystemContextMessage(context);
+    const followUpMessage = buildRequirementFollowUpSystemPromptMessage(jobTitle, clarificationNeeded, requirementType);
+    const followUpPrompt = buildSystemMessage(followUpMessage);
+    const contextPrompt = buildSystemMessage(contextString);
+    return [...context.messageHistory, contextPrompt, followUpPrompt];
+}
+
+
+const buildJobFactsSystemMessage = (
+    context: ConversationContext
+): ChatMessage[] => {
+    const contextString = buildSystemContextMessage(context);
+    const jobFactsMessage = buildJobFactsSystemPromptMessage(context);
+    const jobFactsPrompt = buildSystemMessage(jobFactsMessage);
+    const contextPrompt = buildSystemMessage(contextString);
+    return [...context.messageHistory, contextPrompt, jobFactsPrompt];
+};
+
+const buildCompleteSystemPrompt = (
+    context: ConversationContext
+): ChatMessage[] => {
+    const contextString = buildSystemContextMessage(context);
+    const finalPromptMessage = buildCompletionSystemPromptMessage(context);
+    const finalPrompt = buildSystemMessage(finalPromptMessage);
+    const contextPrompt = buildSystemMessage(contextString);
+    return [...context.messageHistory, contextPrompt, finalPrompt];
+}
+
+const promptBuilders: Record<ConversationContext['status'], PromptFunction> = {
+    'START': buildInitialPrompt,
+    'ON_REQ': buildRequirementSystemMessagePrompt,
+    'NEED_FOLLOW_UP': buildFollowUpRequirementPrompt,
+    'ON_JOB_QUESTIONS': buildJobFactsSystemMessage,
+    'DONE': buildCompleteSystemPrompt,
+};
 /**
  * Builds a prompt for continuing an existing conversation.
  * Includes conversation history and current requirement context.
- * 
- * @param jobTitle - The job title
+ *
  * @param context - The conversation context (history, requirements, current requirement)
  * @returns Array of ChatMessage objects
  */
 export const buildConversationPrompt = (
-  jobTitle: string,
-  context: ConversationContext
-): ChatMessage[] => {
-  const messages: ChatMessage[] = [];
-  
-  // Build system prompt with current requirement context
-  // currentRequirement should always be present when continuing a conversation
-  if (!context.currentRequirement) {
-    throw new Error('currentRequirement is required when building a conversation prompt');
-  }
-  
-  const systemMessage = buildSystemMessageWithRequirement(jobTitle, context.currentRequirement);
-  messages.push(systemMessage);
-  
-  // Add conversation context
-  const contextString = buildConversationContextMessage(context);
-  if (contextString.trim()) {
-    // Add context as a system message or append to existing system message
-    messages.push({
-      role: MessageRole.SYSTEM,
-      content: `\n${contextString}`,
-    });
-  }
-  
-  // Add conversation history (user and assistant messages)
-  messages.push(...context.messageHistory);
-  
-  return messages;
-};
+    context: ConversationContext
+): ChatMessage[] => promptBuilders[context.status](context);
 
 /**
  * Builds a follow-up question prompt when the user's answer is ambiguous.
- * 
- * @param jobTitle - The job title
+ *
  * @param context - The conversation context
  * @param clarificationNeeded - What specific clarification is needed
  * @returns Array of ChatMessage objects with a follow-up question
  */
 export const buildFollowUpPrompt = (
-  jobTitle: string,
-  context: ConversationContext,
-  clarificationNeeded: string
+    context: ConversationContext,
+    clarificationNeeded: string
 ): ChatMessage[] => {
-  const baseMessages = buildConversationPrompt(jobTitle, context);
-  
-  // Add a system instruction for the follow-up
-  baseMessages.push({
-    role: MessageRole.SYSTEM,
-    content: `The candidate's last answer was unclear. You need to ask a clarifying question about: ${clarificationNeeded}`,
-  });
-  
-  return baseMessages;
+    const {jobTitle, currentRequirement} = context
+    const pastMessages = context.messageHistory;
+    const followMessage = buildRequirementFollowUpSystemPromptMessage(jobTitle, clarificationNeeded, currentRequirement.jobRequirementType.requirementType);
+    pastMessages.push({role: MessageRole.SYSTEM, content: `\n${followMessage}`});
+    return pastMessages;
 };
 

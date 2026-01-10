@@ -1,6 +1,6 @@
 import { RequirementsCache } from './interface';
-import { JobRequirementWithType } from '../types';
 import { JobRequirementCacheEntry } from '../types';
+import { JobRequirements } from '../../../entities/job-requirements';
 
 /**
  * Checks if a cache entry has expired based on TTL.
@@ -22,7 +22,7 @@ const isEntryExpired = (entry: JobRequirementCacheEntry, ttlMinutes: number): bo
  * @param requirements - Array of job requirements
  * @returns Top 3 requirements sorted by priority
  */
-const getTopRequirements = (requirements: JobRequirementWithType[]): JobRequirementWithType[] => {
+const getTopRequirements = (requirements: JobRequirements[]): JobRequirements[] => {
   return requirements
     .sort((a, b) => a.priority - b.priority)
     .slice(0, 3);
@@ -37,7 +37,7 @@ const getTopRequirements = (requirements: JobRequirementWithType[]): JobRequirem
  * @returns A new JobRequirementCacheEntry
  */
 const createCacheEntry = (
-  requirements: JobRequirementWithType[],
+  requirements: JobRequirements[],
   createdAt: Date,
   lastUsed: Date
 ): JobRequirementCacheEntry => {
@@ -85,7 +85,7 @@ export function createMemoryRequirementsCache(
    */
   const updateEntry = (
     jobId: string,
-    requirements: JobRequirementWithType[],
+    requirements: JobRequirements[],
     lastUsed: Date
   ): void => {
     const entry = cache[jobId];
@@ -98,7 +98,7 @@ export function createMemoryRequirementsCache(
   const get = async (
     jobId: string,
     priorityThreshold: number = 2
-  ): Promise<JobRequirementWithType[] | null> => {
+  ): Promise<JobRequirements[] | null> => {
     const entry = cache[jobId];
     
     // Cache miss
@@ -125,7 +125,7 @@ export function createMemoryRequirementsCache(
 
   const set = async (
     jobId: string,
-    requirements: JobRequirementWithType[]
+    requirements: JobRequirements[]
   ): Promise<void> => {
     // Take only top 3 requirements (sorted by priority, lower number = higher priority)
     const topRequirements = getTopRequirements(requirements);

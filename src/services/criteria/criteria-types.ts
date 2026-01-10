@@ -429,6 +429,6 @@ export type RequiredCriteria = z.infer<typeof requiredCriteriaSchema>;
  */
 export const isRequiredCriteria = (criteria: unknown): criteria is RequiredCriteria => {
   return requiredCriteriaSchema.safeParse(criteria).success &&
-         (criteria as RequiredCriteria).required !== false;
+         (criteria as RequiredCriteria).required;
 };
 

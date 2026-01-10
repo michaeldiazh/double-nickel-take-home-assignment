@@ -1,273 +1,429 @@
 import {
-  buildInitialPrompt,
-  buildConversationPrompt,
-  buildFollowUpPrompt,
-  getRequirementDescription,
-} from '../../../../../src/services/llm/processor/prompts/question-prompt';
-import { ChatMessage, MessageRole } from '../../../../../src/services/llm/client/types';
-import { ConversationContext } from '../../../../../src/services/llm/processor/prompts/prompt-context';
-import { JobRequirementWithType } from '../../../../../src/services/criteria/types';
-import { RequirementStatus } from '../../../../../src/entities/enums';
-import { SimplifiedConversationRequirements } from '../../../../../src/entities/conversation-requirements/domain';
-import { CDLClassCriteria, CDLClass } from '../../../../../src/services/criteria/criteria-types';
+    buildInitialPrompt,
+    buildConversationPrompt,
+    buildFollowUpPrompt,
+    getRequirementDescription,
+} from '../../../../../src/services/llm/processor/prompts';
+import {ChatMessage, MessageRole} from '../../../../../src/services/llm/client';
+import {ConversationContext} from '../../../../../src/services/llm/processor/prompts';
+import {CDLClass} from '../../../../../src/services/criteria/criteria-types';
+import {
+    SimplifiedJobRequirementType,
+    RequirementStatus,
+    JobRequirements,
+    ConversationRequirements,
+    PaymentType,
+    ApplicationStatus,
+    ScreeningDecision,
+} from "../../../../../src/entities";
 
 describe('Question Prompt Builders', () => {
-  describe('getRequirementDescription', () => {
-    it('should return requirementDescription when provided', () => {
-      const requirementType = {
-        requirementType: 'CDL_CLASS',
-        requirementDescription: 'Commercial Driver License Class',
-      };
+    describe('getRequirementDescription', () => {
+        it('should return requirementDescription when provided', () => {
+            const requirementType: SimplifiedJobRequirementType = {
+                id: 1,
+                requirementType: 'CDL_CLASS',
+                requirementDescription: 'Commercial Driver License Class',
+            };
 
-      const result = getRequirementDescription(requirementType);
-      expect(result).toBe('Commercial Driver License Class');
+            const result = getRequirementDescription(requirementType);
+            expect(result).toBe('Commercial Driver License Class');
+        });
+
+        it('should fallback to formatted requirementType when description is missing', () => {
+            const requirementType: SimplifiedJobRequirementType = {
+                id: 2,
+                requirementType: 'CDL_CLASS',
+                requirementDescription: '',
+            };
+
+            const result = getRequirementDescription(requirementType);
+            expect(result).toBe('cdl class');
+        });
+
+        it('should format requirementType with underscores replaced by spaces', () => {
+            const requirementType: SimplifiedJobRequirementType = {
+                id: 3,
+                requirementType: 'YEARS_EXPERIENCE',
+                requirementDescription: '',
+            };
+
+            const result = getRequirementDescription(requirementType);
+            expect(result).toBe('years experience');
+        });
     });
 
-    it('should fallback to formatted requirementType when description is missing', () => {
-      const requirementType = {
-        requirementType: 'CDL_CLASS',
-        requirementDescription: '',
-      };
+    describe('buildInitialPrompt', () => {
+        const createMockJobRequirement = (): JobRequirements => ({
+            id: '123e4567-e89b-12d3-a456-426614174000',
+            job: {
+                id: '123e4567-e89b-12d3-a456-426614174001',
+                name: 'Long Haul Truck Driver',
+                description: 'Test job',
+                paymentType: PaymentType.HOUR,
+                hourlyPay: 100,
+                milesPay: null,
+                salaryPay: null,
+                addressId: '123e4567-e89b-12d3-a456-426614174002',
+                isActive: true,
+            },
+            jobRequirementType: {
+                id: 1,
+                requirementType: 'CDL_CLASS',
+                requirementDescription: 'CDL Class',
+            },
+            criteria: {cdl_class: CDLClass.A, required: true} as unknown as Record<string, unknown>,
+            priority: 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        });
 
-      const result = getRequirementDescription(requirementType);
-      expect(result).toBe('cdl class');
+        const createMockConversationRequirement = (requirement: JobRequirements): ConversationRequirements => ({
+            id: '123e4567-e89b-12d3-a456-426614174010',
+            conversation: {
+                id: '123e4567-e89b-12d3-a456-426614174020',
+                application: {
+                    id: '123e4567-e89b-12d3-a456-426614174040',
+                    userId: '123e4567-e89b-12d3-a456-426614174030',
+                    jobId: requirement.job.id,
+                    appliedOn: new Date(),
+                    status: ApplicationStatus.IN_PROGRESS,
+                },
+                isActive: true,
+                screeningDecision: ScreeningDecision.PENDING,
+                screeningSummary: null,
+                screeningReasons: null,
+                endedAt: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            },
+            jobRequirements: requirement,
+            messageId: null,
+            status: RequirementStatus.PENDING,
+            value: null,
+            createdAt: new Date(),
+            lastUpdated: new Date(),
+        });
+
+        it('should build initial prompt with system message', () => {
+            const jobTitle = 'Long Haul Truck Driver';
+            const currentRequirement = createMockJobRequirement();
+            const context: ConversationContext = {
+                status: 'START',
+                userFirstName: 'John',
+                jobTitle,
+                jobFacts: [],
+                messageHistory: [],
+                requirements: [currentRequirement],
+                conversationRequirements: [createMockConversationRequirement(currentRequirement)],
+                currentRequirement,
+            };
+
+            const result = buildInitialPrompt(context);
+
+            expect(result).toHaveLength(1);
+            expect(result[0].role).toBe(MessageRole.SYSTEM);
+            expect(result[0].content).toContain('Happy Hauler Trucking Co');
+            expect(result[0].content).toContain(jobTitle);
+            expect(result[0].content).toContain('John');
+        });
+
+        it('should include company name in system prompt', () => {
+            const currentRequirement = createMockJobRequirement();
+            const context: ConversationContext = {
+                status: 'START',
+                userFirstName: 'Jane',
+                jobTitle: 'Driver',
+                jobFacts: [],
+                messageHistory: [],
+                requirements: [currentRequirement],
+                conversationRequirements: [createMockConversationRequirement(currentRequirement)],
+                currentRequirement,
+            };
+
+            const result = buildInitialPrompt(context);
+            expect(result[0].content).toContain('Happy Hauler Trucking Co');
+            expect(result[0].content).toContain('Jane');
+        });
     });
 
-    it('should format requirementType with underscores replaced by spaces', () => {
-      const requirementType = {
-        requirementType: 'YEARS_EXPERIENCE',
-        requirementDescription: '',
-      };
+    describe('buildConversationPrompt', () => {
+        const createMockJobRequirement = (
+            requirementType: string = 'CDL_CLASS',
+            priority: number = 1,
+            criteria: unknown = {cdl_class: CDLClass.A, required: true}
+        ): JobRequirements => ({
+            id: '123e4567-e89b-12d3-a456-426614174000',
+            job: {
+                id: '123e4567-e89b-12d3-a456-426614174001',
+                name: 'Long Haul Truck Driver',
+                description: 'Test job',
+                paymentType: PaymentType.HOUR,
+                hourlyPay: 100,
+                milesPay: null,
+                salaryPay: null,
+                addressId: '123e4567-e89b-12d3-a456-426614174002',
+                isActive: true,
+            },
+            jobRequirementType: {
+                id: 1,
+                requirementType,
+                requirementDescription: 'CDL Class',
+            },
+            criteria: criteria as unknown as Record<string, unknown>,
+            priority,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        });
 
-      const result = getRequirementDescription(requirementType);
-      expect(result).toBe('years experience');
-    });
-  });
+        const createMockConversationRequirement = (
+            requirement: JobRequirements,
+            status: RequirementStatus = RequirementStatus.PENDING
+        ): ConversationRequirements => ({
+            id: '123e4567-e89b-12d3-a456-426614174010',
+            conversation: {
+                id: '123e4567-e89b-12d3-a456-426614174020',
+                application: {
+                    id: '123e4567-e89b-12d3-a456-426614174040',
+                    userId: '123e4567-e89b-12d3-a456-426614174030',
+                    jobId: requirement.job.id,
+                    appliedOn: new Date(),
+                    status: ApplicationStatus.IN_PROGRESS,
+                },
+                isActive: true,
+                screeningDecision: ScreeningDecision.PENDING,
+                screeningSummary: null,
+                screeningReasons: null,
+                endedAt: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            },
+            jobRequirements: requirement,
+            messageId: null,
+            status,
+            value: null,
+            createdAt: new Date(),
+            lastUpdated: new Date(),
+        });
 
-  describe('buildInitialPrompt', () => {
-    it('should build initial prompt with system and assistant messages', () => {
-      const jobTitle = 'Long Haul Truck Driver';
-      const jobLocation = 'New York, NY';
+        it('should build conversation prompt with system message and context for ON_REQ status', () => {
+            const jobTitle = 'Long Haul Truck Driver';
+            const currentRequirement = createMockJobRequirement('CDL_CLASS', 1);
+            const messageHistory: ChatMessage[] = [
+                {role: MessageRole.USER, content: 'Hello'},
+                {role: MessageRole.ASSISTANT, content: 'Hi there!'},
+            ];
 
-      const result = buildInitialPrompt(jobTitle, jobLocation);
+            const context: ConversationContext = {
+                status: 'ON_REQ',
+                userFirstName: 'John',
+                jobTitle,
+                jobFacts: [],
+                messageHistory,
+                requirements: [currentRequirement],
+                conversationRequirements: [createMockConversationRequirement(currentRequirement, RequirementStatus.PENDING)],
+                currentRequirement,
+            };
 
-      expect(result).toHaveLength(2);
-      expect(result[0].role).toBe(MessageRole.SYSTEM);
-      expect(result[0].content).toContain('Happy Hauler Trucking Co');
-      expect(result[0].content).toContain(jobTitle);
+            const result = buildConversationPrompt(context);
 
-      expect(result[1].role).toBe(MessageRole.ASSISTANT);
-      expect(result[1].content).toContain('Happy Hauler Trucking Co');
-      expect(result[1].content).toContain(jobTitle);
-      expect(result[1].content).toContain('Can I ask you a few quick questions');
-    });
+            expect(result.length).toBeGreaterThan(1);
+            const systemMessages = result.filter(msg => msg.role === MessageRole.SYSTEM);
+            expect(systemMessages.length).toBeGreaterThan(0);
+            expect(result[0].role).toBe(MessageRole.USER); // messageHistory comes first
+        });
 
-    it('should handle undefined job location', () => {
-      const result = buildInitialPrompt('Driver', undefined);
+        it('should include conversation context as system message', () => {
+            const currentRequirement = createMockJobRequirement('CDL_CLASS', 1);
+            const context: ConversationContext = {
+                status: 'ON_REQ',
+                userFirstName: 'John',
+                jobTitle: 'Driver',
+                jobFacts: [],
+                messageHistory: [],
+                requirements: [currentRequirement],
+                conversationRequirements: [createMockConversationRequirement(currentRequirement, RequirementStatus.PENDING)],
+                currentRequirement,
+            };
 
-      expect(result).toHaveLength(2);
-      expect(result[0].role).toBe(MessageRole.SYSTEM);
-      expect(result[1].role).toBe(MessageRole.ASSISTANT);
-    });
+            const result = buildConversationPrompt(context);
 
-    it('should include company name in assistant greeting', () => {
-      const result = buildInitialPrompt('Driver', 'Location');
-      expect(result[1].content).toContain('Happy Hauler Trucking Co');
-    });
-  });
+            // Should have system messages for context and requirement
+            const systemMessages = result.filter(msg => msg.role === MessageRole.SYSTEM);
+            expect(systemMessages.length).toBeGreaterThanOrEqual(1);
+        });
 
-  describe('buildConversationPrompt', () => {
-    const createMockRequirement = (
-      requirementType: string,
-      priority: number = 1,
-      criteria: unknown = { cdl_class: CDLClass.A, required: true }
-    ): JobRequirementWithType => ({
-      id: '123e4567-e89b-12d3-a456-426614174000',
-      jobId: '123e4567-e89b-12d3-a456-426614174001',
-      requirementTypeId: '123e4567-e89b-12d3-a456-426614174002',
-      priority,
-      criteria: criteria as Record<string, unknown>,
-      requirementType: {
-        requirementType,
-        requirementDescription: 'CDL Class',
-      },
-    });
+        it('should include message history in result', () => {
+            const currentRequirement = createMockJobRequirement('CDL_CLASS', 1);
+            const messageHistory: ChatMessage[] = [
+                {role: MessageRole.USER, content: 'I have a CDL'},
+                {role: MessageRole.ASSISTANT, content: 'Great!'},
+            ];
 
-    const createMockConversationRequirement = (
-      status: RequirementStatus,
-      requirementId: string = '123e4567-e89b-12d3-a456-426614174000' // Default matches createMockRequirement's id
-    ): SimplifiedConversationRequirements => ({
-      id: '123e4567-e89b-12d3-a456-426614174010',
-      conversationId: '123e4567-e89b-12d3-a456-426614174001',
-      requirementId,
-      messageId: null,
-      status,
-      value: null,
-    });
+            const context: ConversationContext = {
+                status: 'ON_REQ',
+                userFirstName: 'John',
+                jobTitle: 'Driver',
+                jobFacts: [],
+                messageHistory,
+                requirements: [currentRequirement],
+                conversationRequirements: [createMockConversationRequirement(currentRequirement, RequirementStatus.PENDING)],
+                currentRequirement,
+            };
 
-    it('should build conversation prompt with system message and context', () => {
-      const jobTitle = 'Long Haul Truck Driver';
-      const currentRequirement = createMockRequirement('CDL_CLASS', 1);
-      const messageHistory: ChatMessage[] = [
-        { role: MessageRole.USER, content: 'Hello' },
-        { role: MessageRole.ASSISTANT, content: 'Hi there!' },
-      ];
+            const result = buildConversationPrompt(context);
 
-      const context: ConversationContext = {
-        messageHistory,
-        requirements: [currentRequirement],
-        conversationRequirements: [createMockConversationRequirement(RequirementStatus.PENDING, currentRequirement.id)],
-        currentRequirement,
-      };
+            // Message history should be included
+            const userMessages = result.filter(msg => msg.role === MessageRole.USER);
+            const assistantMessages = result.filter(msg => msg.role === MessageRole.ASSISTANT);
+            expect(userMessages.length).toBeGreaterThan(0);
+            expect(assistantMessages.length).toBeGreaterThan(0);
+        });
 
-      const result = buildConversationPrompt(jobTitle, context);
+        it('should handle empty message history', () => {
+            const currentRequirement = createMockJobRequirement('CDL_CLASS', 1);
+            const context: ConversationContext = {
+                status: 'ON_REQ',
+                userFirstName: 'John',
+                jobTitle: 'Driver',
+                jobFacts: [],
+                messageHistory: [],
+                requirements: [currentRequirement],
+                conversationRequirements: [createMockConversationRequirement(currentRequirement, RequirementStatus.PENDING)],
+                currentRequirement,
+            };
 
-      expect(result.length).toBeGreaterThan(1);
-      expect(result[0].role).toBe(MessageRole.SYSTEM);
-      expect(result[0].content).toContain('Happy Hauler Trucking Co');
-      expect(result[0].content).toContain(jobTitle);
-      expect(result[0].content).toContain('CDL Class');
-    });
+            const result = buildConversationPrompt(context);
 
-    it('should include conversation context as system message', () => {
-      const currentRequirement = createMockRequirement('CDL_CLASS', 1);
-      const context: ConversationContext = {
-        messageHistory: [],
-        requirements: [currentRequirement],
-        conversationRequirements: [createMockConversationRequirement(RequirementStatus.PENDING, currentRequirement.id)],
-        currentRequirement,
-      };
+            expect(result.length).toBeGreaterThan(0);
+            const systemMessages = result.filter(msg => msg.role === MessageRole.SYSTEM);
+            expect(systemMessages.length).toBeGreaterThan(0);
+        });
 
-      const result = buildConversationPrompt('Driver', context);
+        it('should handle START status', () => {
+            const currentRequirement = createMockJobRequirement('CDL_CLASS', 1);
+            const context: ConversationContext = {
+                status: 'START',
+                userFirstName: 'John',
+                jobTitle: 'Driver',
+                jobFacts: [],
+                messageHistory: [],
+                requirements: [currentRequirement],
+                conversationRequirements: [createMockConversationRequirement(currentRequirement, RequirementStatus.PENDING)],
+                currentRequirement,
+            };
 
-      // Should have at least 2 system messages: one for requirement, one for context
-      const systemMessages = result.filter(msg => msg.role === MessageRole.SYSTEM);
-      expect(systemMessages.length).toBeGreaterThanOrEqual(1);
-    });
-
-    it('should include message history in result', () => {
-      const currentRequirement = createMockRequirement('CDL_CLASS', 1);
-      const messageHistory: ChatMessage[] = [
-        { role: MessageRole.USER, content: 'I have a CDL' },
-        { role: MessageRole.ASSISTANT, content: 'Great!' },
-      ];
-
-      const context: ConversationContext = {
-        messageHistory,
-        requirements: [currentRequirement],
-        conversationRequirements: [createMockConversationRequirement(RequirementStatus.PENDING, currentRequirement.id)],
-        currentRequirement,
-      };
-
-      const result = buildConversationPrompt('Driver', context);
-
-      // Message history should be included
-      const userMessages = result.filter(msg => msg.role === MessageRole.USER);
-      const assistantMessages = result.filter(msg => msg.role === MessageRole.ASSISTANT);
-      expect(userMessages.length).toBeGreaterThan(0);
-      expect(assistantMessages.length).toBeGreaterThan(0);
-    });
-
-    it('should throw error when currentRequirement is missing', () => {
-      const context: ConversationContext = {
-        messageHistory: [],
-        requirements: [],
-        conversationRequirements: [],
-        currentRequirement: undefined,
-      };
-
-      expect(() => buildConversationPrompt('Driver', context)).toThrow(
-        'currentRequirement is required when building a conversation prompt'
-      );
-    });
-
-    it('should handle empty message history', () => {
-      const currentRequirement = createMockRequirement('CDL_CLASS', 1);
-      const context: ConversationContext = {
-        messageHistory: [],
-        requirements: [currentRequirement],
-        conversationRequirements: [createMockConversationRequirement(RequirementStatus.PENDING, currentRequirement.id)],
-        currentRequirement,
-      };
-
-      const result = buildConversationPrompt('Driver', context);
-
-      expect(result.length).toBeGreaterThan(0);
-      expect(result[0].role).toBe(MessageRole.SYSTEM);
-    });
-  });
-
-  describe('buildFollowUpPrompt', () => {
-    const createMockRequirement = (): JobRequirementWithType => ({
-      id: '123e4567-e89b-12d3-a456-426614174000',
-      jobId: '123e4567-e89b-12d3-a456-426614174001',
-      requirementTypeId: '123e4567-e89b-12d3-a456-426614174002',
-      priority: 1,
-      criteria: { cdl_class: CDLClass.A, required: true } as CDLClassCriteria,
-      requirementType: {
-        requirementType: 'CDL_CLASS',
-        requirementDescription: 'CDL Class',
-      },
+            const result = buildConversationPrompt(context);
+            expect(result.length).toBe(1);
+            expect(result[0].role).toBe(MessageRole.SYSTEM);
+        });
     });
 
-    it('should build follow-up prompt with clarification instruction', () => {
-      const currentRequirement = createMockRequirement();
-      const context: ConversationContext = {
-        messageHistory: [
-          { role: MessageRole.USER, content: 'A while' },
-        ],
-        requirements: [currentRequirement],
-        conversationRequirements: [{
-          id: '123e4567-e89b-12d3-a456-426614174010',
-          conversationId: '123e4567-e89b-12d3-a456-426614174001',
-          requirementId: currentRequirement.id,
-          messageId: null,
-          status: RequirementStatus.PENDING,
-          value: null,
-        }],
-        currentRequirement,
-      };
+    describe('buildFollowUpPrompt', () => {
+        const createMockJobRequirement = (): JobRequirements => ({
+            id: '123e4567-e89b-12d3-a456-426614174000',
+            job: {
+                id: '123e4567-e89b-12d3-a456-426614174001',
+                name: 'Driver',
+                description: 'Test job',
+                paymentType: PaymentType.HOUR,
+                hourlyPay: 100,
+                milesPay: null,
+                salaryPay: null,
+                addressId: '123e4567-e89b-12d3-a456-426614174002',
+                isActive: true,
+            },
+            jobRequirementType: {
+                id: 1,
+                requirementType: 'CDL_CLASS',
+                requirementDescription: 'CDL Class',
+            },
+            criteria: {cdl_class: CDLClass.A, required: true} as unknown as Record<string, unknown>,
+            priority: 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        });
 
-      const clarificationNeeded = 'exact number of years of experience';
-      const result = buildFollowUpPrompt('Driver', context, clarificationNeeded);
+        const createMockConversationRequirement = (requirement: JobRequirements): ConversationRequirements => ({
+            id: '123e4567-e89b-12d3-a456-426614174010',
+            conversation: {
+                id: '123e4567-e89b-12d3-a456-426614174020',
+                application: {
+                    id: '123e4567-e89b-12d3-a456-426614174040',
+                    userId: '123e4567-e89b-12d3-a456-426614174030',
+                    jobId: requirement.job.id,
+                    appliedOn: new Date(),
+                    status: ApplicationStatus.IN_PROGRESS,
+                },
+                isActive: true,
+                screeningDecision: ScreeningDecision.PENDING,
+                screeningSummary: null,
+                screeningReasons: null,
+                endedAt: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            },
+            jobRequirements: requirement,
+            messageId: null,
+            status: RequirementStatus.PENDING,
+            value: null,
+            createdAt: new Date(),
+            lastUpdated: new Date(),
+        });
 
-      // Should include base conversation prompt plus follow-up instruction
-      expect(result.length).toBeGreaterThan(1);
-      
-      // Last message should be system message with clarification instruction
-      const lastMessage = result[result.length - 1];
-      expect(lastMessage.role).toBe(MessageRole.SYSTEM);
-      expect(lastMessage.content).toContain(clarificationNeeded);
-      expect(lastMessage.content).toContain('unclear');
+        it('should build follow-up prompt with clarification instruction', () => {
+            const currentRequirement = createMockJobRequirement();
+            const clarificationNeeded = 'exact number of years of experience';
+            const context: ConversationContext = {
+                status: 'NEED_FOLLOW_UP',
+                clarificationNeeded,
+                userFirstName: 'John',
+                jobTitle: 'Driver',
+                jobFacts: [],
+                messageHistory: [
+                    {role: MessageRole.USER, content: 'A while'},
+                ],
+                requirements: [currentRequirement],
+                conversationRequirements: [createMockConversationRequirement(currentRequirement)],
+                currentRequirement,
+            };
+
+            const result = buildFollowUpPrompt(context, clarificationNeeded);
+
+            // Should include message history plus follow-up instruction
+            expect(result.length).toBeGreaterThan(1);
+
+            // Last message should be system message with clarification instruction
+            const lastMessage = result[result.length - 1];
+            expect(lastMessage.role).toBe(MessageRole.SYSTEM);
+            expect(lastMessage.content).toContain(clarificationNeeded);
+        });
+
+        it('should include all base conversation messages', () => {
+            const currentRequirement = createMockJobRequirement();
+            const messageHistory: ChatMessage[] = [
+                {role: MessageRole.USER, content: 'Hello'},
+                {role: MessageRole.ASSISTANT, content: 'Hi!'},
+            ];
+
+            const clarificationNeeded = 'years';
+            const context: ConversationContext = {
+                status: 'NEED_FOLLOW_UP',
+                clarificationNeeded,
+                userFirstName: 'John',
+                jobTitle: 'Driver',
+                jobFacts: [],
+                messageHistory,
+                requirements: [currentRequirement],
+                conversationRequirements: [createMockConversationRequirement(currentRequirement)],
+                currentRequirement,
+            };
+
+            const result = buildFollowUpPrompt(context, clarificationNeeded);
+
+            // Should include original messages
+            const userMessages = result.filter(msg => msg.role === MessageRole.USER);
+            expect(userMessages.length).toBeGreaterThan(0);
+        });
     });
-
-    it('should include all base conversation messages', () => {
-      const currentRequirement = createMockRequirement();
-      const messageHistory: ChatMessage[] = [
-        { role: MessageRole.USER, content: 'Hello' },
-        { role: MessageRole.ASSISTANT, content: 'Hi!' },
-      ];
-
-      const context: ConversationContext = {
-        messageHistory,
-        requirements: [currentRequirement],
-        conversationRequirements: [{
-          id: '123e4567-e89b-12d3-a456-426614174010',
-          conversationId: '123e4567-e89b-12d3-a456-426614174001',
-          requirementId: currentRequirement.id,
-          messageId: null,
-          status: RequirementStatus.PENDING,
-          value: null,
-        }],
-        currentRequirement,
-      };
-
-      const result = buildFollowUpPrompt('Driver', context, 'years');
-
-      // Should include original messages
-      const userMessages = result.filter(msg => msg.role === MessageRole.USER);
-      expect(userMessages.length).toBeGreaterThan(0);
-    });
-  });
 });
-
