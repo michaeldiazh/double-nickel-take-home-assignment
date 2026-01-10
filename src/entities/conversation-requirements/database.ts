@@ -1,9 +1,11 @@
 import {z} from 'zod';
+import {QueryResult} from 'pg';
 import {ConversationRequirements} from './domain';
-import {requirementStatusSchema} from '../enums';
+import {requirementStatusSchema, RequirementStatus} from '../enums';
 import {KeyTranslator} from '../../services/filters/where-filter';
 import {conversationDomainKeyToTableKey} from '../conversation';
 import { jobRequirementsDomainKeyToTableKey } from '../job-requirements';
+import { getJobRequirementIds } from '../job-requirements/database';
 
 /**
  * Database row schema for conversation_requirements table (snake_case)
@@ -45,5 +47,47 @@ export const insertConversationRequirementsRowSchema = z.object({
 });
 
 export type InsertConversationRequirementsRow = z.infer<typeof insertConversationRequirementsRowSchema>;
+
+/**
+ * Creates conversation requirements for a conversation based on job requirements.
+ * Fetches job requirement IDs for the job and creates conversation_requirements for each.
+ * All requirements are created with status PENDING.
+ * 
+ * @param client - Database client (can be from a transaction or pool)
+ * @param conversationId - The conversation ID
+ * @param jobId - The job ID to get job requirements from
+ * @throws Error if no job requirements found for the job
+ */
+export const createConversationRequirements = async (
+  client: { query: (text: string, values?: unknown[]) => Promise<QueryResult> },
+  conversationId: string,
+  jobId: string
+): Promise<void> => {
+  // 1. Get job requirement IDs for the job (ordered by priority)
+  const jobRequirementIds = await getJobRequirementIds(client, jobId);
+  
+  // 2. Create conversation_requirements for each job requirement (status: PENDING)
+  const insertQuery = `
+    INSERT INTO conversation_requirements (id, conversation_id, requirement_id, status, message_id, value)
+    VALUES (gen_random_uuid(), $1, $2, $3, NULL, NULL)
+    RETURNING id
+  `;
+  
+  for (const requirementId of jobRequirementIds) {
+    const insertData = insertConversationRequirementsRowSchema.parse({
+      conversation_id: conversationId,
+      requirement_id: requirementId,
+      status: RequirementStatus.PENDING,
+      message_id: null,
+      value: null,
+    });
+    
+    await client.query(insertQuery, [
+      insertData.conversation_id,
+      insertData.requirement_id,
+      insertData.status,
+    ]);
+  }
+};
 
 

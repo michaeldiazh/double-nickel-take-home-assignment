@@ -56,6 +56,22 @@ export interface HandlerResponse {
 }
 
 /**
+ * Result of starting a new conversation context.
+ * Contains the conversation ID and the START conversation context.
+ */
+export interface StartConversationContextResult {
+  /**
+   * The created conversation ID
+   */
+  conversationId: string;
+  
+  /**
+   * The conversation context with START status
+   */
+  context: ConversationContext;
+}
+
+/**
  * Configuration for the LLM handler.
  */
 export interface HandlerConfig {

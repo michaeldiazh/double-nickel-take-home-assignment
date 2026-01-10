@@ -12,7 +12,7 @@
  * 8. Returns response
  */
 
-export type { HandlerRequest, HandlerResponse, HandlerConfig } from './types';
+export type { HandlerRequest, HandlerResponse, HandlerConfig, StartConversationContextResult } from './types';
 export { parseLLMResponse } from '../../criteria/parser';
 export type { ParseResult } from '../../criteria/parser';
 
@@ -27,8 +27,6 @@ export {
 
 // Context loader exports
 export {
-  createConversation,
   startNewConversationContext,
-  type StartConversationContextResult,
 } from './context-loader';
 

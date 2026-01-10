@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {QueryResult} from 'pg';
 import {Application, SimplifiedApplication} from './domain';
 import {simplifiedUserDomainKeyToTableKey} from '../user/database';
 import {simplifiedJobDomainKeyToTableKey} from '../job/database';
@@ -66,4 +67,47 @@ export const insertApplicationRowSchema = z.object({
 });
 
 export type InsertApplicationRow = z.infer<typeof insertApplicationRowSchema>;
+
+/**
+ * Result type for application data with related job and user information.
+ * Used when querying application with joins to job and users tables.
+ */
+export interface ApplicationWithJobAndUser {
+  jobId: string;
+  jobName: string;
+  userFirstName: string;
+}
+
+/**
+ * Gets application data with related job and user information.
+ * 
+ * @param client - Database client (can be from a transaction or pool)
+ * @param applicationId - The application ID
+ * @returns Application data with job ID, job name, and user first name
+ * @throws Error if application not found
+ */
+export const getApplicationWithJobAndUser = async (
+  client: { query: (text: string, values?: unknown[]) => Promise<QueryResult> },
+  applicationId: string
+): Promise<ApplicationWithJobAndUser> => {
+  const query = `
+    SELECT 
+      a.job_id as jobId,
+      j.name as jobName,
+      u.first_name as userFirstName
+    FROM application a
+    INNER JOIN job j ON a.job_id = j.id
+    INNER JOIN users u ON a.user_id = u.id
+    WHERE a.id = $1
+  `;
+  
+  const result: QueryResult<ApplicationWithJobAndUser> = await client.query(query, [applicationId]);
+  
+  if (result.rows.length === 0) {
+    throw new Error(`Application not found: ${applicationId}`);
+  }
+  
+  const {jobId, jobName, userFirstName} = result.rows[0];
+  return { jobId, jobName, userFirstName };
+};
 

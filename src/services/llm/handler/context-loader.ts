@@ -4,98 +4,27 @@
  */
 
 import { Pool } from 'pg';
-import { ScreeningDecision, RequirementStatus } from '../../../entities/enums';
-import { ConversationRequirements } from '../../../entities';
-import { insertConversationRowSchema } from '../../../entities/conversation/database';
-import { insertConversationRequirementsRowSchema } from '../../../entities/conversation-requirements/database';
-import { loadConversationRequirements } from './loaders';
-
-/**
- * Result of starting a new conversation context.
- * Contains all data needed to build the START context.
- */
-export interface StartConversationContextResult {
-  /**
-   * The created conversation ID
-   */
-  conversationId: string;
-  
-  /**
-   * Full conversation requirements with nested data (job requirements, conversation, application, etc.)
-   * All requirements will have status PENDING.
-   */
-  conversationRequirements: ConversationRequirements[];
-  
-  /**
-   * User's first name (for context building)
-   */
-  userFirstName: string;
-  
-  /**
-   * Job title/name (for context building)
-   */
-  jobTitle: string;
-}
-
-/**
- * Creates a new conversation in the database.
- * Utility function exposed separately for other use cases.
- * 
- * @param dbPool - Database connection pool
- * @param appId - The application ID this conversation belongs to
- * @returns The created conversation ID
- */
-export const createConversation = async (
-  dbPool: Pool,
-  appId: string
-): Promise<string> => {
-  const insertData = {
-    app_id: appId,
-    is_active: true,
-    screening_decision: ScreeningDecision.PENDING,
-    screening_summary: null,
-    screening_reasons: null,
-    ended_at: null,
-  };
-  
-  // Validate insert data
-  const validatedData = insertConversationRowSchema.parse(insertData);
-  
-  // Build and execute INSERT query - let PostgreSQL generate the UUID
-  const query = `
-    INSERT INTO conversation (id, app_id, is_active, screening_decision, screening_summary, screening_reasons, ended_at)
-    VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)
-    RETURNING id
-  `;
-  
-  const values = [
-    validatedData.app_id,
-    validatedData.is_active,
-    validatedData.screening_decision,
-    validatedData.screening_summary,
-    validatedData.screening_reasons,
-    validatedData.ended_at,
-  ];
-  
-  const result = await dbPool.query<{ id: string }>(query, values);
-  return result.rows[0].id;
-};
+import { createConversation } from '../../../entities/conversation/database';
+import { createConversationRequirements } from '../../../entities/conversation-requirements/database';
+import { getApplicationWithJobAndUser } from '../../../entities/application/database';
+import { loadConversationRequirements, loadJobFacts } from './loaders';
+import { ConversationContext } from '../processor/prompts/prompt-context';
+import type { StartConversationContextResult } from './types';
 
 /**
  * Starts a new conversation context by creating conversation and all conversation requirements.
  * All conversation requirements will be created with status PENDING.
  * 
  * This function:
- * 1. Gets application data (jobId, userId)
- * 2. Gets user firstName and job title
- * 3. Gets job requirements for the job
- * 4. Creates conversation (in transaction)
- * 5. Creates conversation_requirements for each job requirement with PENDING status (in transaction)
- * 6. Loads back full conversation_requirements with nested data
+ * 1. Gets application data (jobId, userId, userFirstName, jobTitle)
+ * 2. Creates conversation (in transaction)
+ * 3. Creates conversation_requirements for each job requirement with PENDING status (in transaction)
+ * 4. Loads back full conversation_requirements with nested data
+ * 5. Builds ConversationContext with START status
  * 
  * @param dbPool - Database connection pool
  * @param applicationId - The application ID
- * @returns Result with conversationId, full conversationRequirements, userFirstName, and jobTitle
+ * @returns Result with conversationId and ConversationContext (START status)
  */
 export const startNewConversationContext = async (
   dbPool: Pool,
@@ -108,113 +37,49 @@ export const startNewConversationContext = async (
     await client.query('BEGIN');
     
     try {
-      // 1. Get application data (jobId, userId, jobName, userFirstName)
-      const applicationQuery = `
-        SELECT 
-          a.job_id,
-          a.user_id,
-          j.name as job_name,
-          u.first_name as user_first_name
-        FROM application a
-        INNER JOIN job j ON a.job_id = j.id
-        INNER JOIN users u ON a.user_id = u.id
-        WHERE a.id = $1
-      `;
+      // 1. Get application data with job and user information
+      const { jobId, jobName: jobTitle, userFirstName } = await getApplicationWithJobAndUser(client, applicationId);
       
-      const applicationResult = await client.query<{
-        job_id: string;
-        user_id: string;
-        job_name: string;
-        user_first_name: string;
-      }>(applicationQuery, [applicationId]);
+      // 2. Create conversation
+      const createdConversationId = await createConversation(client, applicationId);
       
-      if (applicationResult.rows.length === 0) {
-        throw new Error(`Application not found: ${applicationId}`);
-      }
-      
-      const { job_id: jobId, job_name: jobTitle, user_first_name: userFirstName } = applicationResult.rows[0];
-      
-      // 2. Get job requirements for the job (ordered by priority)
-      const jobRequirementsQuery = `
-        SELECT id
-        FROM job_requirements
-        WHERE job_id = $1
-        ORDER BY priority ASC, created_at ASC
-      `;
-      
-      const jobRequirementsResult = await client.query<{ id: string }>(jobRequirementsQuery, [jobId]);
-      
-      if (jobRequirementsResult.rows.length === 0) {
-        throw new Error(`No job requirements found for job: ${jobId}`);
-      }
-      
-      const jobRequirementIds = jobRequirementsResult.rows.map(row => row.id);
-      
-      // 3. Create conversation (inlined to use transaction client)
-      const conversationInsertQuery = `
-        INSERT INTO conversation (id, app_id, is_active, screening_decision, screening_summary, screening_reasons, ended_at)
-        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)
-        RETURNING id
-      `;
-      
-      const conversationInsertData = insertConversationRowSchema.parse({
-        app_id: applicationId,
-        is_active: true,
-        screening_decision: ScreeningDecision.PENDING,
-        screening_summary: null,
-        screening_reasons: null,
-        ended_at: null,
-      });
-      
-      const conversationInsertResult = await client.query<{ id: string }>(
-        conversationInsertQuery,
-        [
-          conversationInsertData.app_id,
-          conversationInsertData.is_active,
-          conversationInsertData.screening_decision,
-          conversationInsertData.screening_summary,
-          conversationInsertData.screening_reasons,
-          conversationInsertData.ended_at,
-        ]
-      );
-      
-      const createdConversationId = conversationInsertResult.rows[0].id;
-      
-      // 4. Create conversation_requirements for each job requirement (status: PENDING)
-      const createConversationRequirementQuery = `
-        INSERT INTO conversation_requirements (id, conversation_id, requirement_id, status, message_id, value)
-        VALUES (gen_random_uuid(), $1, $2, $3, NULL, NULL)
-        RETURNING id
-      `;
-      
-      for (const requirementId of jobRequirementIds) {
-        const insertData = insertConversationRequirementsRowSchema.parse({
-          conversation_id: createdConversationId,
-          requirement_id: requirementId,
-          status: RequirementStatus.PENDING,
-          message_id: null,
-          value: null,
-        });
-        
-        await client.query(createConversationRequirementQuery, [
-          insertData.conversation_id,
-          insertData.requirement_id,
-          insertData.status,
-        ]);
-      }
+      // 3. Create conversation_requirements for each job requirement (status: PENDING)
+      // This function will fetch job requirement IDs and create conversation_requirements
+      await createConversationRequirements(client, createdConversationId, jobId);
       
       // Commit transaction
       await client.query('COMMIT');
       
-      // 5. Load back full conversation_requirements with nested data using existing loader
+      // 5. Load back full conversation_requirements with nested data and job facts
       // (We can't use the existing loader with the transaction client, so we'll use the pool after commit)
-      const conversationRequirements = await loadConversationRequirements(createdConversationId);
+      const [conversationRequirements, jobFacts] = await Promise.all([
+        loadConversationRequirements(createdConversationId),
+        loadJobFacts(jobId),
+      ]);
+      
+      // 6. Build ConversationContext with START status
+      // Extract requirements from conversationRequirements (for START context)
+      const requirements = conversationRequirements.map(cr => cr.jobRequirements);
+      const currentRequirement = requirements[0]; // First requirement (ordered by priority)
+      
+      if (!currentRequirement) {
+        throw new Error('No requirements found in conversation requirements');
+      }
+      
+      const context: ConversationContext = {
+        status: 'START',
+        userFirstName,
+        jobTitle,
+        jobFacts,
+        messageHistory: [], // Empty for START
+        requirements,
+        conversationRequirements,
+        currentRequirement,
+      };
       
       return {
         conversationId: createdConversationId,
-        conversationRequirements,
-        userFirstName,
-        jobTitle,
+        context,
       };
       
     } catch (error) {
