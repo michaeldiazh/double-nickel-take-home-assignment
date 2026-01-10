@@ -1,18 +1,33 @@
 /**
  * LLM Handler module exports.
  * 
- * The handler orchestrates the complete flow:
- * 1. Receives user messages
- * 2. Loads conversation context
- * 3. Builds prompts using LLM Processor
- * 4. Sends to LLM Client
- * 5. Parses LLM responses
- * 6. Evaluates using Criteria Handlers
- * 7. Stores results in database
- * 8. Returns response
+ * The handler orchestrates the complete flow for LLM conversations:
+ * - Starting new conversations with initial greeting
+ * - Processing user messages in existing conversations
+ * - Loading conversation context (cache-first)
+ * - Building prompts using LLM Processor
+ * - Sending to LLM Client
+ * - Parsing LLM responses (when status is ON_REQ)
+ * - Evaluating using Criteria Handlers
+ * - Storing results in database
+ * - Managing conversation context cache
+ * 
+ * Usage:
+ * ```ts
+ * const handler = createHandler({ llmClient, dbPool });
+ * const startResponse = await handler.startConversation({ applicationId });
+ * const messageResponse = await handler.handleMessage({ userMessage, conversationId });
+ * ```
  */
 
-export type { HandlerRequest, HandlerResponse, HandlerConfig, StartConversationContextResult } from './types';
+export type { 
+  HandlerRequest, 
+  HandlerResponse, 
+  HandlerConfig, 
+  StartConversationContextResult,
+  StartConversationRequest,
+  StartConversationResponse,
+} from './types';
 export { parseLLMResponse } from '../../criteria/parser';
 export type { ParseResult } from '../../criteria/parser';
 
@@ -29,6 +44,11 @@ export {
 export {
   startNewConversationContext,
 } from './context-loader';
+
+// Loader exports
+export {
+  loadFullContextFromConversationId,
+} from './loaders';
 
 // Handler exports
 export {
