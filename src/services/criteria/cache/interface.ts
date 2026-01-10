@@ -1,4 +1,4 @@
-import { JobRequirementWithType } from '../types';
+import { JobRequirements } from '../../../entities/job-requirements';
 
 /**
  * Cache interface for storing and retrieving job requirements.
@@ -8,7 +8,7 @@ import { JobRequirementWithType } from '../types';
  * - Redis cache for production
  * 
  * Cache key: job_id (UUID string)
- * Cache value: Array of JobRequirementWithType, ordered by priority (top 3 only)
+ * Cache value: Array of JobRequirements with full entity objects, ordered by priority (top 3 only)
  * 
  * Note: Only the top 3 requirements (by priority, lower number = higher priority) are cached.
  * This aligns with the screening flow which asks up to 3 qualification questions.
@@ -22,18 +22,18 @@ export interface RequirementsCache {
    *                          If not provided, returns all cached requirements (up to 3).
    * @returns Promise resolving to the filtered requirements array if found, null if cache miss
    */
-  get(jobId: string, priorityThreshold?: number): Promise<JobRequirementWithType[] | null>;
+  get(jobId: string, priorityThreshold?: number): Promise<JobRequirements[] | null>;
 
   /**
    * Stores job requirements for a given job ID in the cache.
    * Only the top 3 requirements (by priority, lower number = higher priority) are stored.
    * 
    * @param jobId - The UUID of the job
-   * @param requirements - Array of requirements with their types, should be ordered by priority.
+   * @param requirements - Array of requirements with full entity objects, should be ordered by priority.
    *                      Only the top 3 will be cached.
    * @returns Promise that resolves when the cache operation completes
    */
-  set(jobId: string, requirements: JobRequirementWithType[]): Promise<void>;
+  set(jobId: string, requirements: JobRequirements[]): Promise<void>;
 
   /**
    * Removes job requirements for a given job ID from the cache.

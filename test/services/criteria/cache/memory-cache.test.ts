@@ -1,5 +1,5 @@
 import { createMemoryRequirementsCache } from '../../../../src/services/criteria/cache/memory-cache';
-import { JobRequirementWithType } from '../../../../src/services/criteria/types';
+import { JobRequirements, PaymentType } from '../../../../src/entities';
 import { RequirementsCache } from '../../../../src/services/criteria/cache/interface';
 
 describe('Memory Requirements Cache', () => {
@@ -20,17 +20,28 @@ describe('Memory Requirements Cache', () => {
     requirementTypeId: number,
     priority: number,
     requirementType: string = 'CDL_CLASS'
-  ): JobRequirementWithType => ({
+  ): JobRequirements => ({
     id,
-    jobId,
-    requirementTypeId,
-    criteria: { cdl_class: 'A', required: true },
-    priority,
-    requirementType: {
+    job: {
+      id: jobId,
+      name: 'Test Job',
+      description: 'Test job description',
+      paymentType: PaymentType.HOUR,
+      hourlyPay: 100,
+      milesPay: null,
+      salaryPay: null,
+      addressId: '123e4567-e89b-12d3-a456-426614174000',
+      isActive: true,
+    },
+    jobRequirementType: {
       id: requirementTypeId,
       requirementType,
       requirementDescription: `Requirement type ${requirementType}`,
     },
+    criteria: { cdl_class: 'A', required: true } as unknown as Record<string, unknown>,
+    priority,
+    createdAt: new Date(),
+    updatedAt: new Date(),
   });
 
   describe('set', () => {
@@ -67,7 +78,7 @@ describe('Memory Requirements Cache', () => {
 
       await cache.set(jobId, initialRequirements);
       const firstGet = await cache.get(jobId);
-      const originalCreatedAt = new Date(firstGet![0].id); // We'll track this differently
+      expect(firstGet).not.toBeNull();
 
       // Wait a bit to ensure timestamps differ
       await new Promise(resolve => setTimeout(resolve, 10));

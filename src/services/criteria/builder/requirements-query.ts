@@ -41,15 +41,31 @@ const requirementTypeFields: [string, string][] = [
 ];
 
 /**
+ * Mapping of job fields to their database column references.
+ * Format: [['json_key', 'table.column'], ...]
+ */
+const jobFields: [string, string][] = [
+  ['id', 'job.id'],
+  ['name', 'job.name'],
+  ['description', 'job.description'],
+  ['paymentType', 'job.payment_type'],
+  ['hourlyPay', 'job.hourly_pay'],
+  ['milesPay', 'job.miles_pay'],
+  ['salaryPay', 'job.salary_pay'],
+  ['addressId', 'job.address_id'],
+  ['isActive', 'job.is_active'],
+];
+
+/**
  * Mapping of job requirement fields to their database column references.
  * Format: [['json_key', 'table.column'], ...]
  */
 const jobRequirementFields: [string, string][] = [
   ['id', 'job_requirements.id'],
-  ['jobId', 'job_requirements.job_id'],
-  ['requirementTypeId', 'job_requirements.job_requirement_type_id'],
   ['criteria', 'job_requirements.criteria'],
   ['priority', 'job_requirements.priority'],
+  ['createdAt', 'job_requirements.created_at'],
+  ['updatedAt', 'job_requirements.updated_at'],
 ];
 
 /**
@@ -62,19 +78,29 @@ const buildRequirementTypeJson = (): string => {
 };
 
 /**
+ * Builds the JSON object for job using PostgreSQL jsonb_build_object.
+ * 
+ * @returns SQL expression string for building the job JSON object
+ */
+const buildJobJson = (): string => {
+  return buildJsonObject(jobFields);
+};
+
+/**
  * Builds the select column expression for job requirements query.
- * Uses PostgreSQL JSON functions to return structured JobRequirementWithType objects.
+ * Uses PostgreSQL JSON functions to return structured JobRequirements objects.
  * 
  * @returns SQL expression string for the select column
  */
 const buildRequirementsSelectColumn = (): string => {
   // Build the main requirement object fields
-  const requirementFieldsWithType: [string, string][] = [
+  const requirementFieldsWithObjects: [string, string][] = [
     ...jobRequirementFields,
-    ['requirementType', buildRequirementTypeJson()],
+    ['job', buildJobJson()],
+    ['jobRequirementType', buildRequirementTypeJson()],
   ];
   
-  const requirementObject = buildJsonObject(requirementFieldsWithType, '      ');
+  const requirementObject = buildJsonObject(requirementFieldsWithObjects, '      ');
   
   return `jsonb_array_agg(
     ${requirementObject}
@@ -83,18 +109,26 @@ const buildRequirementsSelectColumn = (): string => {
 };
 
 /**
- * Builds the join clause for job requirements query.
- * Joins job_requirements with job_requirement_type to get requirement type information.
+ * Builds the join clauses for job requirements query.
+ * Joins job_requirements with job_requirement_type and job to get full entity information.
  * 
- * @returns Join clause configuration
+ * @returns Array of Join clause configurations
  */
-const buildRequirementsJoinClause = (): Join => {
-  return {
-    joinOperator: 'join',
-    sourceTable: 'job_requirements',
-    targetTable: 'job_requirement_type',
-    relationship: [['job_requirement_type_id', 'id']],
-  };
+const buildRequirementsJoinClauses = (): Join[] => {
+  return [
+    {
+      joinOperator: 'join',
+      sourceTable: 'job_requirements',
+      targetTable: 'job_requirement_type',
+      relationship: [['job_requirement_type_id', 'id']],
+    },
+    {
+      joinOperator: 'join',
+      sourceTable: 'job_requirements',
+      targetTable: 'job',
+      relationship: [['job_id', 'id']],
+    },
+  ];
 };
 
 /**
@@ -153,7 +187,7 @@ export const buildRequirementsByJobIdQuery = (jobId: string) => {
   return buildSelectQuery({
     selectColumns: [buildRequirementsSelectColumn()],
     fromTable: 'job_requirements',
-    joinClauses: [buildRequirementsJoinClause()],
+    joinClauses: buildRequirementsJoinClauses(),
     whereClause: whereOptions,
     groupBy: buildRequirementsGroupBy(),
   });

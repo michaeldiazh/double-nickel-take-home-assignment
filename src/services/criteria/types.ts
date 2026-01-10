@@ -1,4 +1,4 @@
-import { SimplifiedJobRequirements } from '../../entities/job-requirements';
+import {JobRequirements, SimplifiedJobRequirements} from '../../entities/job-requirements';
 import { SimplifiedJobRequirementType } from '../../entities/job-requirement-type';
 
 /**
@@ -13,12 +13,12 @@ export type JobRequirementWithType = SimplifiedJobRequirements & {
  * Cache entry structure for storing job requirements with metadata.
  * 
  * Contains:
- * - requirements: The top 3 job requirements (ordered by priority)
+ * - requirements: The top 3 job requirements (ordered by priority) with full entity objects
  * - lastUsed: Timestamp of when this entry was last accessed
  * - createdAt: Timestamp of when this entry was created (for TTL calculation)
  */
 export type JobRequirementCacheEntry = {
-  requirements: JobRequirementWithType[];
+  requirements: JobRequirements[];
   lastUsed: Date;
   createdAt: Date;
 };

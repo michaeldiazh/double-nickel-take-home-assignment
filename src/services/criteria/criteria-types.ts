@@ -17,6 +17,23 @@ export enum JobRequirementType {
 }
 
 /**
+ * Base schema for criteria that has a required field.
+ * This is a common pattern across many criteria types.
+ * The required field can be required or optional depending on the criteria type.
+ */
+export const requiredCriteriaSchema = z.object({
+  required: z.boolean(),
+}).catchall(z.unknown());
+
+/**
+ * Base schema for criteria with optional required field.
+ * Used for criteria types where required is optional.
+ */
+export const optionalRequiredCriteriaSchema = z.object({
+  required: z.boolean().optional(),
+}).catchall(z.unknown());
+
+/**
  * CDL Class values
  */
 export enum CDLClass {
@@ -29,9 +46,8 @@ export enum CDLClass {
  * Criteria for CDL_CLASS requirement type.
  * Used in job_requirements.criteria column.
  */
-export const cdlClassCriteriaSchema = z.object({
+export const cdlClassCriteriaSchema = requiredCriteriaSchema.extend({
   cdl_class: z.enum([CDLClass.A, CDLClass.B, CDLClass.C]),
-  required: z.boolean(),
 });
 
 export type CDLClassCriteria = z.infer<typeof cdlClassCriteriaSchema>;
@@ -40,9 +56,8 @@ export type CDLClassCriteria = z.infer<typeof cdlClassCriteriaSchema>;
  * Criteria for YEARS_EXPERIENCE requirement type.
  * Used in job_requirements.criteria column.
  */
-export const yearsExperienceCriteriaSchema = z.object({
+export const yearsExperienceCriteriaSchema = optionalRequiredCriteriaSchema.extend({
   min_years: z.number().int().positive(),
-  required: z.boolean().optional(),
   preferred: z.boolean().optional(),
 });
 
@@ -52,10 +67,9 @@ export type YearsExperienceCriteria = z.infer<typeof yearsExperienceCriteriaSche
  * Criteria for DRIVING_RECORD requirement type.
  * Used in job_requirements.criteria column.
  */
-export const drivingRecordCriteriaSchema = z.object({
+export const drivingRecordCriteriaSchema = requiredCriteriaSchema.extend({
   max_violations: z.number().int().min(0),
   max_accidents: z.number().int().min(0),
-  required: z.boolean(),
 });
 
 export type DrivingRecordCriteria = z.infer<typeof drivingRecordCriteriaSchema>;
@@ -64,11 +78,10 @@ export type DrivingRecordCriteria = z.infer<typeof drivingRecordCriteriaSchema>;
  * Criteria for ENDORSEMENTS requirement type.
  * Used in job_requirements.criteria column.
  */
-export const endorsementsCriteriaSchema = z.object({
+export const endorsementsCriteriaSchema = optionalRequiredCriteriaSchema.extend({
   hazmat: z.union([z.boolean(), z.literal('preferred')]).optional(),
   tanker: z.union([z.boolean(), z.literal('preferred')]).optional(),
   doubles_triples: z.union([z.boolean(), z.literal('preferred')]).optional(),
-  required: z.boolean().optional(),
 });
 
 export type EndorsementsCriteria = z.infer<typeof endorsementsCriteriaSchema>;
@@ -77,9 +90,8 @@ export type EndorsementsCriteria = z.infer<typeof endorsementsCriteriaSchema>;
  * Criteria for AGE_REQUIREMENT requirement type.
  * Used in job_requirements.criteria column.
  */
-export const ageRequirementCriteriaSchema = z.object({
+export const ageRequirementCriteriaSchema = requiredCriteriaSchema.extend({
   min_age: z.number().int().positive().min(18),
-  required: z.boolean(),
 });
 
 export type AgeRequirementCriteria = z.infer<typeof ageRequirementCriteriaSchema>;
@@ -88,9 +100,8 @@ export type AgeRequirementCriteria = z.infer<typeof ageRequirementCriteriaSchema
  * Criteria for PHYSICAL_EXAM requirement type.
  * Used in job_requirements.criteria column.
  */
-export const physicalExamCriteriaSchema = z.object({
+export const physicalExamCriteriaSchema = requiredCriteriaSchema.extend({
   current_dot_physical: z.boolean(),
-  required: z.boolean(),
 });
 
 export type PhysicalExamCriteria = z.infer<typeof physicalExamCriteriaSchema>;
@@ -99,10 +110,9 @@ export type PhysicalExamCriteria = z.infer<typeof physicalExamCriteriaSchema>;
  * Criteria for DRUG_TEST requirement type.
  * Used in job_requirements.criteria column.
  */
-export const drugTestCriteriaSchema = z.object({
+export const drugTestCriteriaSchema = requiredCriteriaSchema.extend({
   pre_employment: z.boolean(),
   random_testing: z.boolean().optional(),
-  required: z.boolean(),
 });
 
 export type DrugTestCriteria = z.infer<typeof drugTestCriteriaSchema>;
@@ -213,8 +223,7 @@ export type DrugTestValue = z.infer<typeof drugTestValueSchema>;
  * Criteria for BACKGROUND_CHECK requirement type.
  * Used in job_requirements.criteria column.
  */
-export const backgroundCheckCriteriaSchema = z.object({
-  required: z.boolean(),
+export const backgroundCheckCriteriaSchema = requiredCriteriaSchema.extend({
   // Optional: specific types of background checks
   criminal_check: z.boolean().optional(),
   employment_verification: z.boolean().optional(),
@@ -238,10 +247,9 @@ export type BackgroundCheckValue = z.infer<typeof backgroundCheckValueSchema>;
  * Criteria for GEOGRAPHIC_RESTRICTION requirement type.
  * Used in job_requirements.criteria column.
  */
-export const geographicRestrictionCriteriaSchema = z.object({
+export const geographicRestrictionCriteriaSchema = requiredCriteriaSchema.extend({
   allowed_states: z.array(z.string().length(2)).optional(), // State codes like ["NY", "NJ", "PA"]
   allowed_regions: z.array(z.string()).optional(), // Regions like ["Northeast", "Mid-Atlantic"]
-  required: z.boolean(),
 });
 
 export type GeographicRestrictionCriteria = z.infer<typeof geographicRestrictionCriteriaSchema>;
@@ -405,5 +413,22 @@ export const isGeographicRestrictionCriteria = (criteria: unknown): criteria is 
  */
 export const isGeographicRestrictionValue = (value: unknown): value is GeographicRestrictionValue => {
   return geographicRestrictionValueSchema.safeParse(value).success;
+};
+
+/**
+ * Criteria that has a required field indicating whether the requirement is mandatory.
+ * This is a common pattern across many criteria types.
+ */
+export type RequiredCriteria = z.infer<typeof requiredCriteriaSchema>;
+
+/**
+ * Type guard to check if criteria has a required field.
+ * 
+ * @param criteria - The criteria object to check
+ * @returns True if criteria has a required field that is not false
+ */
+export const isRequiredCriteria = (criteria: unknown): criteria is RequiredCriteria => {
+  return requiredCriteriaSchema.safeParse(criteria).success &&
+         (criteria as RequiredCriteria).required;
 };
 
