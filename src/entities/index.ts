@@ -13,4 +13,5 @@ export * from './application';
 export * from './conversation';
 export * from './message';
 export * from './conversation-requirements';
+export * from './llm-evaluation-audit';
 
