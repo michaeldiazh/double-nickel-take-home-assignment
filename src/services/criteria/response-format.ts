@@ -4,79 +4,113 @@
  */
 
 import { JobRequirementType } from './criteria-types';
+
+/**
+ * Formats a single JSON field description for LLM prompts.
+ * Creates a consistent format: `  "field_name": type (optional)`
+ * 
+ * @param name - The JSON field name (e.g., "cdl_class", "years_experience")
+ * @param type - The field type description (e.g., "boolean", '"A" | "B" | "C"')
+ * @param optional - Whether the field is optional (default: false)
+ * @returns Formatted string for use in JSON structure descriptions
+ */
+const formatField = (name: string, type: string, optional: boolean = false): string => {
+  return `  "${name}": ${type}${optional ? ' (optional)' : ''}`;
+};
+
+/**
+ * Gets the value-specific JSON structure description for a requirement type.
+ * This describes only the requirement-specific fields (not assessment/confidence).
+ * 
+ * @param requirementType - The requirement type
+ * @returns A string describing the requirement-specific JSON structure
+ */
+const getRequirementSpecificFormat = (requirementType: string): string => {
+  const normalizedType = requirementType.toUpperCase() as JobRequirementType;
+  
+  switch (normalizedType) {
+    case JobRequirementType.CDL_CLASS:
+      return [
+        formatField('cdl_class', '"A" | "B" | "C"'),
+        formatField('confirmed', 'boolean'),
+      ].join(',\n');
+    
+    case JobRequirementType.YEARS_EXPERIENCE:
+      return [
+        formatField('years_experience', 'number (integer, >= 0)'),
+        formatField('meets_requirement', 'boolean'),
+        formatField('exceeds_requirement', 'boolean', true),
+      ].join(',\n');
+    
+    case JobRequirementType.DRIVING_RECORD:
+      return [
+        formatField('violations', 'number (integer, >= 0)'),
+        formatField('accidents', 'number (integer, >= 0)'),
+        formatField('clean_record', 'boolean'),
+      ].join(',\n');
+    
+    case JobRequirementType.ENDORSEMENTS:
+      return [
+        formatField('hazmat', 'boolean', true),
+        formatField('tanker', 'boolean', true),
+        formatField('doubles_triples', 'boolean', true),
+        formatField('endorsements_confirmed', 'boolean'),
+      ].join(',\n');
+    
+    case JobRequirementType.AGE_REQUIREMENT:
+      return [
+        formatField('age', 'number (integer, >= 18)'),
+        formatField('meets_requirement', 'boolean'),
+      ].join(',\n');
+    
+    case JobRequirementType.PHYSICAL_EXAM:
+      return [
+        formatField('has_current_dot_physical', 'boolean'),
+        formatField('confirmed', 'boolean'),
+      ].join(',\n');
+    
+    case JobRequirementType.DRUG_TEST:
+      return [
+        formatField('agrees_to_pre_employment', 'boolean'),
+        formatField('agrees_to_random_testing', 'boolean', true),
+        formatField('confirmed', 'boolean'),
+      ].join(',\n');
+    
+    case JobRequirementType.BACKGROUND_CHECK:
+      return [
+        formatField('agrees_to_background_check', 'boolean'),
+        formatField('confirmed', 'boolean'),
+      ].join(',\n');
+    
+    case JobRequirementType.GEOGRAPHIC_RESTRICTION:
+      return [
+        formatField('location', 'string'),
+        formatField('state', 'string (2-letter state code)', true),
+        formatField('meets_requirement', 'boolean'),
+      ].join(',\n');
+    
+    default: {
+      // Exhaustiveness check: if a new requirement type is added, TypeScript will error here
+      const _exhaustive: never = normalizedType;
+      throw new Error(`Unsupported requirement type: ${requirementType}`);
+    }
+  }
+};
+
 /**
  * Gets a human-readable JSON structure description for a requirement type.
- * This tells the LLM exactly what format to return.
+ * This tells the LLM exactly what format to return, including assessment and confidence.
  * 
  * @param requirementType - The requirement type
  * @returns A string describing the expected JSON structure
  */
 export const getResponseFormatDescription = (requirementType: string): string => {
-  const normalizedType = requirementType.toUpperCase() as JobRequirementType;
+  const requirementFields = getRequirementSpecificFormat(requirementType);
   
-  switch (normalizedType) {
-    case JobRequirementType.CDL_CLASS:
-      return `{
-  "cdl_class": "A" | "B" | "C",
-  "confirmed": boolean
+  return `{
+${requirementFields},
+  "assessment": "MET" | "NOT_MET" | "PENDING" (your assessment of whether the candidate meets this requirement),
+  "confidence": number (0.0 to 1.0, optional, representing your confidence level in the assessment)
 }`;
-    
-    case JobRequirementType.YEARS_EXPERIENCE:
-      return `{
-  "years_experience": number (integer, >= 0),
-  "meets_requirement": boolean,
-  "exceeds_requirement": boolean (optional)
-}`;
-    
-    case JobRequirementType.DRIVING_RECORD:
-      return `{
-  "violations": number (integer, >= 0),
-  "accidents": number (integer, >= 0),
-  "clean_record": boolean
-}`;
-    
-    case JobRequirementType.ENDORSEMENTS:
-      return `{
-  "hazmat": boolean (optional),
-  "tanker": boolean (optional),
-  "doubles_triples": boolean (optional),
-  "endorsements_confirmed": boolean
-}`;
-    
-    case JobRequirementType.AGE_REQUIREMENT:
-      return `{
-  "age": number (integer, >= 18),
-  "meets_requirement": boolean
-}`;
-    
-    case JobRequirementType.PHYSICAL_EXAM:
-      return `{
-  "has_current_dot_physical": boolean,
-  "confirmed": boolean
-}`;
-    
-    case JobRequirementType.DRUG_TEST:
-      return `{
-  "agrees_to_pre_employment": boolean,
-  "agrees_to_random_testing": boolean (optional),
-  "confirmed": boolean
-}`;
-    
-    case JobRequirementType.BACKGROUND_CHECK:
-      return `{
-  "agrees_to_background_check": boolean,
-  "confirmed": boolean
-}`;
-    
-    case JobRequirementType.GEOGRAPHIC_RESTRICTION:
-      return `{
-  "location": string,
-  "state": string (2-letter state code, optional),
-  "meets_requirement": boolean
-}`;
-    
-    default:
-      return 'JSON object matching the requirement criteria';
-  }
 };
 

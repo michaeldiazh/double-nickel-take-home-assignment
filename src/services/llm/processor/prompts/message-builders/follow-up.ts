@@ -10,7 +10,10 @@ const buildJSONResponseInstruction = (requirementType: string): string => `
     When you have collected enough information to evaluate this requirement, you MUST return your assessment in the following exact JSON format:
     ${getResponseFormatDescription(requirementType)}
     
-    Important: Return ONLY the JSON object, no additional text or explanation. This ensures accurate parsing of the candidate's response.
+    Important Notes:
+    - Return ONLY the JSON object, no additional text or explanation. This ensures accurate parsing of the candidate's response.
+    - The "assessment" field should be your judgment: "MET" if the candidate meets the requirement, "NOT_MET" if they don't, or "PENDING" if you need more information.
+    - The "confidence" field (optional) should be a number between 0.0 and 1.0 representing how confident you are in your assessment. Higher values indicate greater confidence.
 `;
 
 const buildGuidelineListForFollowUp = (): string[] => ([
