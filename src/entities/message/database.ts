@@ -1,7 +1,8 @@
 import {z} from 'zod';
+import {QueryResult} from 'pg';
 import {Message} from './domain';
 import {simplifiedConversationDomainKeyToTableKey} from '../conversation/database';
-import {messageSenderSchema} from '../enums';
+import {messageSenderSchema, MessageSender} from '../enums';
 import {KeyTranslator} from '../../services/filters/where-filter';
 
 /**
@@ -37,4 +38,40 @@ export const insertMessageRowSchema = z.object({
 });
 
 export type InsertMessageRow = z.infer<typeof insertMessageRowSchema>;
+
+/**
+ * Creates a new message in the database.
+ * 
+ * @param client - Database client (can be from a transaction or pool)
+ * @param conversationId - The conversation ID this message belongs to
+ * @param sender - The message sender (USER, ASSISTANT, SYSTEM)
+ * @param content - The message content
+ * @returns The created message ID
+ */
+export const createMessage = async (
+  client: { query: (text: string, values?: unknown[]) => Promise<QueryResult> },
+  conversationId: string,
+  sender: MessageSender,
+  content: string
+): Promise<string> => {
+  const query = `
+    INSERT INTO message (id, conversation_id, sender, content)
+    VALUES (gen_random_uuid(), $1, $2, $3)
+    RETURNING id
+  `;
+  
+  const insertData = insertMessageRowSchema.parse({
+    conversation_id: conversationId,
+    sender,
+    content,
+  });
+  
+  const result: QueryResult<{ id: string }> = await client.query(query, [
+    insertData.conversation_id,
+    insertData.sender,
+    insertData.content,
+  ]);
+  
+  return result.rows[0].id;
+};
 

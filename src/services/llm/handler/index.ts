@@ -30,3 +30,9 @@ export {
   startNewConversationContext,
 } from './context-loader';
 
+// Handler exports
+export {
+  createHandler,
+  type Handler,
+} from './handler';
+
