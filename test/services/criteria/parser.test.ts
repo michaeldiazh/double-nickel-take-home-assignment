@@ -1,5 +1,6 @@
 import { parseLLMResponse } from '../../../src/services/criteria/parser';
 import { AgeRequirementValue, EndorsementsValue, CDLClassValue, DrivingRecordValue, GeographicRestrictionValue, JobRequirementType, BackgroundCheckValue } from '../../../src/services/criteria/criteria-types';
+import { RequirementStatus } from '../../../src/entities/enums';
 
 describe('Parser', () => {
   describe('parseLLMResponse', () => {
@@ -11,6 +12,24 @@ describe('Parser', () => {
         expect(result.success).toBe(true);
         expect(result.value).toEqual({ cdl_class: 'A', confirmed: true });
         expect(result.needsClarification).toBe(false);
+        expect(result.assessment).toBeNull();
+        expect(result.confidence).toBeNull();
+      });
+
+      it('should parse JSON response with assessment and confidence', () => {
+        const content = JSON.stringify({ 
+          cdl_class: 'A', 
+          confirmed: true,
+          assessment: 'MET',
+          confidence: 0.95
+        });
+        const result = parseLLMResponse(JobRequirementType.CDL_CLASS, content);
+        
+        expect(result.success).toBe(true);
+        expect(result.value).toEqual({ cdl_class: 'A', confirmed: true });
+        expect(result.assessment).toBe(RequirementStatus.MET);
+        expect(result.confidence).toBe(0.95);
+        expect(result.needsClarification).toBe(false);
       });
 
       it('should parse natural language response with CDL class', () => {
@@ -20,6 +39,8 @@ describe('Parser', () => {
         expect(result.success).toBe(true);
         expect(result.value).toEqual({ cdl_class: 'A', confirmed: true });
         expect(result.needsClarification).toBe(false);
+        expect(result.assessment).toBeNull();
+        expect(result.confidence).toBeNull();
       });
 
       it('should return error when CDL class cannot be parsed', () => {
@@ -30,6 +51,8 @@ describe('Parser', () => {
         expect(result.value).toBe(null);
         expect(result.needsClarification).toBe(true);
         expect(result.error).toContain('CDL class');
+        expect(result.assessment).toBeNull();
+        expect(result.confidence).toBeNull();
       });
     });
 
@@ -49,6 +72,8 @@ describe('Parser', () => {
           confirmed: true,
         });
         expect(result.needsClarification).toBe(false);
+        expect(result.assessment).toBeNull();
+        expect(result.confidence).toBeNull();
       });
 
       it('should parse natural language agreement', () => {
@@ -62,6 +87,8 @@ describe('Parser', () => {
           confirmed: true,
         });
         expect(result.needsClarification).toBe(false);
+        expect(result.assessment).toBeNull();
+        expect(result.confidence).toBeNull();
       });
 
       it('should parse natural language disagreement', () => {
@@ -75,6 +102,8 @@ describe('Parser', () => {
           confirmed: true,
         });
         expect(result.needsClarification).toBe(false);
+        expect(result.assessment).toBeNull();
+        expect(result.confidence).toBeNull();
       });
     });
 
@@ -86,6 +115,8 @@ describe('Parser', () => {
         expect(result.success).toBe(true);
         expect(result.value).toEqual({ years_experience: 5, meets_requirement: true });
         expect(result.needsClarification).toBe(false);
+        expect(result.assessment).toBeNull();
+        expect(result.confidence).toBeNull();
       });
 
       it('should parse natural language with years of experience', () => {
@@ -95,6 +126,8 @@ describe('Parser', () => {
         expect(result.success).toBe(true);
         expect(result.value).toEqual({ years_experience: 5, meets_requirement: true });
         expect(result.needsClarification).toBe(false);
+        expect(result.assessment).toBeNull();
+        expect(result.confidence).toBeNull();
       });
     });
 
@@ -114,6 +147,8 @@ describe('Parser', () => {
           endorsements_confirmed: true,
         });
         expect(result.needsClarification).toBe(false);
+        expect(result.assessment).toBeNull();
+        expect(result.confidence).toBeNull();
       });
 
       it('should parse natural language with endorsements', () => {
@@ -125,6 +160,8 @@ describe('Parser', () => {
         expect(result.value?.tanker).toBe(true);
         expect(result.value?.endorsements_confirmed).toBe(true);
         expect(result.needsClarification).toBe(false);
+        expect(result.assessment).toBeNull();
+        expect(result.confidence).toBeNull();
       });
     });
 
@@ -136,6 +173,8 @@ describe('Parser', () => {
         expect(result.success).toBe(true);
         expect(result.value).toEqual({ has_current_dot_physical: true, confirmed: true });
         expect(result.needsClarification).toBe(false);
+        expect(result.assessment).toBeNull();
+        expect(result.confidence).toBeNull();
       });
 
       it('should parse natural language with physical exam status', () => {
@@ -145,6 +184,8 @@ describe('Parser', () => {
         expect(result.success).toBe(true);
         expect(result.value).toEqual({ has_current_dot_physical: true, confirmed: true });
         expect(result.needsClarification).toBe(false);
+        expect(result.assessment).toBeNull();
+        expect(result.confidence).toBeNull();
       });
     });
 
@@ -156,6 +197,8 @@ describe('Parser', () => {
         expect(result.success).toBe(true);
         expect(result.value).toEqual({ location: 'NY', state: 'NY', meets_requirement: true });
         expect(result.needsClarification).toBe(false);
+        expect(result.assessment).toBeNull();
+        expect(result.confidence).toBeNull();
       });
 
       it('should parse natural language with state code', () => {
@@ -166,6 +209,8 @@ describe('Parser', () => {
         expect(result.value?.state).toBe('NY');
         expect(result.value?.location).toBe('NY');
         expect(result.needsClarification).toBe(false);
+        expect(result.assessment).toBeNull();
+        expect(result.confidence).toBeNull();
       });
     });
 
@@ -177,6 +222,8 @@ describe('Parser', () => {
         expect(result.success).toBe(true);
         expect(result.value).toEqual({ age: 25, meets_requirement: true });
         expect(result.needsClarification).toBe(false);
+        expect(result.assessment).toBeNull();
+        expect(result.confidence).toBeNull();
       });
 
       it('should parse natural language with age', () => {
@@ -186,6 +233,8 @@ describe('Parser', () => {
         expect(result.success).toBe(true);
         expect(result.value?.age).toBe(25);
         expect(result.needsClarification).toBe(false);
+        expect(result.assessment).toBeNull();
+        expect(result.confidence).toBeNull();
       });
     });
 
@@ -197,6 +246,8 @@ describe('Parser', () => {
         expect(result.success).toBe(true);
         expect(result.value).toEqual({ violations: 2, accidents: 1, clean_record: false });
         expect(result.needsClarification).toBe(false);
+        expect(result.assessment).toBeNull();
+        expect(result.confidence).toBeNull();
       });
 
       it('should parse natural language with violations and accidents', () => {
@@ -207,6 +258,8 @@ describe('Parser', () => {
         expect(result.value?.violations).toBe(2);
         expect(result.value?.accidents).toBe(1);
         expect(result.needsClarification).toBe(false);
+        expect(result.assessment).toBeNull();
+        expect(result.confidence).toBeNull();
       });
     });
 
@@ -218,6 +271,8 @@ describe('Parser', () => {
         expect(result.success).toBe(true);
         expect(result.value).toEqual({ agrees_to_background_check: true, confirmed: true });
         expect(result.needsClarification).toBe(false);
+        expect(result.assessment).toBeNull();
+        expect(result.confidence).toBeNull();
       });
 
       it('should parse natural language agreement', () => {
@@ -227,6 +282,64 @@ describe('Parser', () => {
         expect(result.success).toBe(true);
         expect(result.value?.agrees_to_background_check).toBe(true);
         expect(result.needsClarification).toBe(false);
+        expect(result.assessment).toBeNull();
+        expect(result.confidence).toBeNull();
+      });
+    });
+
+    describe('Assessment and Confidence', () => {
+      it('should extract assessment and confidence from JSON response', () => {
+        const content = JSON.stringify({
+          years_experience: 5,
+          meets_requirement: true,
+          assessment: 'MET',
+          confidence: 0.9
+        });
+        const result = parseLLMResponse(JobRequirementType.YEARS_EXPERIENCE, content);
+        
+        expect(result.success).toBe(true);
+        expect(result.assessment).toBe(RequirementStatus.MET);
+        expect(result.confidence).toBe(0.9);
+      });
+
+      it('should handle optional confidence field', () => {
+        const content = JSON.stringify({
+          cdl_class: 'B',
+          confirmed: true,
+          assessment: 'NOT_MET'
+        });
+        const result = parseLLMResponse(JobRequirementType.CDL_CLASS, content);
+        
+        expect(result.success).toBe(true);
+        expect(result.assessment).toBe(RequirementStatus.NOT_MET);
+        expect(result.confidence).toBeNull();
+      });
+
+      it('should handle PENDING assessment', () => {
+        const content = JSON.stringify({
+          age: 25,
+          meets_requirement: true,
+          assessment: 'PENDING',
+          confidence: 0.5
+        });
+        const result = parseLLMResponse(JobRequirementType.AGE_REQUIREMENT, content);
+        
+        expect(result.success).toBe(true);
+        expect(result.assessment).toBe(RequirementStatus.PENDING);
+        expect(result.confidence).toBe(0.5);
+      });
+
+      it('should handle confidence values at boundaries', () => {
+        const content = JSON.stringify({
+          agrees_to_background_check: true,
+          confirmed: true,
+          assessment: 'MET',
+          confidence: 0.0
+        });
+        const result = parseLLMResponse(JobRequirementType.BACKGROUND_CHECK, content);
+        
+        expect(result.success).toBe(true);
+        expect(result.confidence).toBe(0.0);
       });
     });
 
@@ -238,6 +351,8 @@ describe('Parser', () => {
         expect(result.value).toBe(null);
         expect(result.needsClarification).toBe(true);
         expect(result.error).toContain('Unsupported requirement type');
+        expect(result.assessment).toBeNull();
+        expect(result.confidence).toBeNull();
       });
     });
 
@@ -248,6 +363,8 @@ describe('Parser', () => {
         
         expect(result.success).toBe(true);
         expect(result.value).toEqual({ cdl_class: 'A', confirmed: true });
+        expect(result.assessment).toBeNull();
+        expect(result.confidence).toBeNull();
       });
     });
   });
