@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {QueryResult} from 'pg';
 import {JobRequirements, SimplifiedJobRequirements} from './domain';
 import {simplifiedJobDomainKeyToTableKey} from '../job';
 import {simplifiedJobRequirementTypeDomainKeyToTableKey} from '../job-requirement-type/database';
@@ -65,4 +66,32 @@ export const insertJobRequirementsRowSchema = z.object({
 });
 
 export type InsertJobRequirementsRow = z.infer<typeof insertJobRequirementsRowSchema>;
+
+/**
+ * Gets job requirement IDs for a job (ordered by priority).
+ * 
+ * @param client - Database client (can be from a transaction or pool)
+ * @param jobId - The job ID
+ * @returns Array of job requirement IDs, ordered by priority and creation date
+ * @throws Error if no job requirements found
+ */
+export const getJobRequirementIds = async (
+  client: { query: (text: string, values?: unknown[]) => Promise<QueryResult> },
+  jobId: string
+): Promise<string[]> => {
+  const query = `
+    SELECT id
+    FROM job_requirements
+    WHERE job_id = $1
+    ORDER BY priority ASC, created_at ASC
+  `;
+  
+  const result: QueryResult<{ id: string }> = await client.query(query, [jobId]);
+  
+  if (result.rows.length === 0) {
+    throw new Error(`No job requirements found for job: ${jobId}`);
+  }
+  
+  return result.rows.map(row => row.id);
+};
 

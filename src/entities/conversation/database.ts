@@ -1,7 +1,8 @@
 import {z} from 'zod';
+import {QueryResult} from 'pg';
 import {Conversation, SimplifiedConversation} from './domain';
 import {simplifiedApplicationDomainKeyToTableKey} from '../application/database';
-import {screeningDecisionSchema} from '../enums';
+import {screeningDecisionSchema, ScreeningDecision} from '../enums';
 import {KeyTranslator} from '../../services/filters/where-filter';
 
 /**
@@ -73,4 +74,42 @@ export const insertConversationRowSchema = z.object({
 });
 
 export type InsertConversationRow = z.infer<typeof insertConversationRowSchema>;
+
+/**
+ * Creates a new conversation in the database.
+ * 
+ * @param client - Database client (can be from a transaction or pool)
+ * @param appId - The application ID this conversation belongs to
+ * @returns The created conversation ID
+ */
+export const createConversation = async (
+  client: { query: (text: string, values?: unknown[]) => Promise<QueryResult> },
+  appId: string
+): Promise<string> => {
+  const query = `
+    INSERT INTO conversation (id, app_id, is_active, screening_decision, screening_summary, screening_reasons, ended_at)
+    VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)
+    RETURNING id
+  `;
+  
+  const insertData = insertConversationRowSchema.parse({
+    app_id: appId,
+    is_active: true,
+    screening_decision: ScreeningDecision.PENDING,
+    screening_summary: null,
+    screening_reasons: null,
+    ended_at: null,
+  });
+  
+  const result: QueryResult<{ id: string }> = await client.query(query, [
+    insertData.app_id,
+    insertData.is_active,
+    insertData.screening_decision,
+    insertData.screening_summary,
+    insertData.screening_reasons,
+    insertData.ended_at,
+  ]);
+  
+  return result.rows[0].id;
+};
 
