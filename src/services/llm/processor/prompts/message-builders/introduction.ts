@@ -13,7 +13,6 @@ const buildHeadingLine = (jobTitle: string): string => `
     Your role is to guide candidates through job qualification questions for a ${jobTitle} position.
 `;
 
-
 /**
  * Builds the list of guidelines for the recruitment assistant.
  *
@@ -30,22 +29,21 @@ const buildGuidelineList = (jobTitle: string): string[] => ([
     `- If asked about other positions at ${COMPANY_NAME}, you can mention that ${COMPANY_NAME} has other openings, but redirect focus back to screening for the ${jobTitle} position`,
 ]);
 
-
 const createGoalLine = (jobTitle: string): string => `
     Your goal is to help candidates complete their application screening for the ${jobTitle} position by collecting their qualifications through natural conversation.
 `;
 
-
 /**
  * Builds the system prompt message for the LLM chatbot.
+ * Used when conversation status is START (user already said yes, ready to begin screening).
  *
  * @param context - The conversation context containing job title
  * @returns The system prompt message string
  */
 export const buildIntroductionSystemPromptMessage = (context: ConversationContext): string => {
-    const {userFirstName, jobTitle} = context;
-    const heading = buildHeadingLine(jobTitle);
-    const guidelines = buildGuidelineList(jobTitle).join('\n');
+    const {user_first_name, job_title} = context;
+    const heading = buildHeadingLine(job_title);
+    const guidelines = buildGuidelineList(job_title).join('\n');
     return `
         System Introduction:
         ${heading}
@@ -54,8 +52,8 @@ export const buildIntroductionSystemPromptMessage = (context: ConversationContex
         ${guidelines}
         
         Goal:
-        ${createGoalLine(jobTitle)}
+        ${createGoalLine(job_title)}
         
-        Lets get started and say hello to ${userFirstName}!
+        Lets get started and say hello to ${user_first_name}!
     `
 };

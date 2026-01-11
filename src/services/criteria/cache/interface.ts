@@ -1,4 +1,4 @@
-import { JobRequirements } from '../../../entities/job-requirements';
+
 
 /**
  * Cache interface for storing and retrieving job requirements.
@@ -22,7 +22,7 @@ export interface RequirementsCache {
    *                          If not provided, returns all cached requirements (up to 3).
    * @returns Promise resolving to the filtered requirements array if found, null if cache miss
    */
-  get(jobId: string, priorityThreshold?: number): Promise<JobRequirements[] | null>;
+  get(jobId: string, priorityThreshold?: number): Promise<Job[] | null>;
 
   /**
    * Stores job requirements for a given job ID in the cache.

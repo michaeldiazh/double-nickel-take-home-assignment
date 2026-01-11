@@ -1,3 +1,4 @@
+import { RequirementStatus } from '../../../entities/conversation-job-requirement/domain';
 import {
   BackgroundCheckCriteria,
   backgroundCheckValueSchema,
@@ -15,16 +16,16 @@ import { CriteriaHandler, RequirementEvaluationResult } from './types';
 const meetsBackgroundCheckRequirement = (
   userAgreesToBackgroundCheck: boolean,
   criteria: BackgroundCheckCriteria
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   if (!criteria.required) {
-    return RequirementEvaluationResult.MET;
+    return RequirementStatus.MET;
   }
 
   if (userAgreesToBackgroundCheck) {
-    return RequirementEvaluationResult.MET;
+    return RequirementStatus.MET;
   }
 
-  return RequirementEvaluationResult.NOT_MET;
+  return RequirementStatus.NOT_MET;
 };
 
 /**
@@ -37,14 +38,14 @@ const meetsBackgroundCheckRequirement = (
 export const handleBackgroundCheck: CriteriaHandler<BackgroundCheckCriteria> = (
   criteria,
   value
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   if (value === null) {
-    return RequirementEvaluationResult.PENDING;
+    return RequirementStatus.PENDING;
   }
 
   const validationResult = backgroundCheckValueSchema.safeParse(value);
   if (!validationResult.success) {
-    return RequirementEvaluationResult.NOT_MET;
+    return RequirementStatus.NOT_MET;
   }
 
   return meetsBackgroundCheckRequirement(validationResult.data.agrees_to_background_check, criteria);
@@ -56,7 +57,7 @@ export const handleBackgroundCheck: CriteriaHandler<BackgroundCheckCriteria> = (
 export const evaluateBackgroundCheck = (
   criteria: unknown,
   value: unknown
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   if (!isBackgroundCheckCriteria(criteria)) {
     throw new Error('Invalid background check criteria');
   }

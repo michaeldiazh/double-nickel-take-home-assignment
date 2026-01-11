@@ -1,33 +1,13 @@
-import {ChatMessage} from '../../client';
+import { ConversationContext } from '../../../conversation-context';
 import {
-    ConversationRequirements,
-    JobFacts,
-    JobRequirements,
+    ConversationJobRequirement,
+    JobRequirement,
     RequirementStatus
 } from '../../../../entities';
-import {
-    buildConversationHistory,
-    buildRequirementsOverviewSection,
-    buildCurrentRequirementDetailsSection,
-    buildPreviouslyCollectedValueSection,
-} from './message-builders';
 
-type BaseContext = {
-    userFirstName: string;
-    jobTitle: string;
-    jobFacts: JobFacts[],
-    messageHistory: ChatMessage[];
-    requirements: JobRequirements[];
-    conversationRequirements: ConversationRequirements[];
-    currentRequirement: JobRequirements;
-};
+// Re-export for backwards compatibility
+export type { ConversationContext } from '../../../conversation-context';
 
-export type ConversationContext =
-    | (BaseContext & { status: 'NEED_FOLLOW_UP'; clarificationNeeded: string })
-    | (BaseContext & {
-    status: 'START' | 'ON_REQ' | 'ON_JOB_QUESTIONS' | 'DONE';
-    clarificationNeeded?: never
-});
 /**
  * Builds the current requirement details section.
  *
@@ -36,12 +16,12 @@ export type ConversationContext =
  * @returns Formatted current requirement details string
  */
 const buildCurrentRequirementDetails = (
-    currentRequirement: JobRequirements,
-    conversationRequirements: ConversationRequirements[]
+    currentRequirement: JobRequirement,
+    conversationRequirements: ConversationJobRequirement[]
 ): string => {
     const conversationRequirement = conversationRequirements.find(
-        cr => cr.jobRequirements.id === currentRequirement.id
-    )!;
+        cr => cr.job_requirement_id === currentRequirement.id
+    );
     if (!conversationRequirement) {
         throw new Error(`Conversation requirement not found for requirement ID: ${currentRequirement.id}`);
     }
@@ -63,9 +43,11 @@ const buildCurrentRequirementDetails = (
  */
 export const buildConversationContextMessage = (context: ConversationContext): string => {
     const parts: string[] = [];
-    parts.push(buildConversationHistory(context.messageHistory));
-    parts.push(buildRequirementsOverviewSection(context.conversationRequirements));
-    parts.push(buildCurrentRequirementDetails(context.currentRequirement, context.conversationRequirements));
+    parts.push(buildConversationHistory(context.message_history));
+    parts.push(buildRequirementsOverviewSection(context.conversation_requirements));
+    if (context.current_requirement) {
+        parts.push(buildCurrentRequirementDetails(context.current_requirement, context.conversation_requirements));
+    }
 
     return parts.join('\n');
 };
@@ -77,10 +59,10 @@ export const buildConversationContextMessage = (context: ConversationContext): s
  * @returns True if the requirement is completed, false otherwise
  */
 const isRequirementCompleted = (
-    conversationRequirement: ConversationRequirements
+    conversationRequirement: ConversationJobRequirement
 ): boolean => {
-    return conversationRequirement.status === RequirementStatus.MET ||
-        conversationRequirement.status === RequirementStatus.NOT_MET;
+    return conversationRequirement.status === 'MET' ||
+        conversationRequirement.status === 'NOT_MET';
 };
 
 /**
@@ -91,10 +73,17 @@ const isRequirementCompleted = (
  * @returns Formatted summary string
  */
 export const buildRequirementsSummary = (context: ConversationContext): string => {
-    const completedConversationRequirements = context.conversationRequirements.filter(isRequirementCompleted);
+    const completedConversationRequirements = context.conversation_requirements.filter(isRequirementCompleted);
     const stringifiedCompletedConversationRequirements = completedConversationRequirements
-        .map(cr => `- ${cr.jobRequirements.id}: ${cr.status}`);
+        .map(cr => `- ${cr.job_requirement_id}: ${cr.status}`);
     return `## Completed Requirements
         ${stringifiedCompletedConversationRequirements.join('\n')}`;
 };
 
+// Helper functions (imported from message-builders)
+import {
+    buildConversationHistory,
+    buildRequirementsOverviewSection,
+    buildCurrentRequirementDetailsSection,
+    buildPreviouslyCollectedValueSection,
+} from './message-builders';

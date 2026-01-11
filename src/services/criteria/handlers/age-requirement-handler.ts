@@ -1,3 +1,4 @@
+import { RequirementStatus } from '../../../entities/conversation-job-requirement/domain';
 import {
   AgeRequirementCriteria,
   ageRequirementValueSchema,
@@ -15,12 +16,12 @@ import { CriteriaHandler, RequirementEvaluationResult } from './types';
 const meetsAgeRequirement = (
   userAge: number,
   criteria: AgeRequirementCriteria
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   if (userAge >= criteria.min_age) {
-    return RequirementEvaluationResult.MET;
+    return RequirementStatus.MET;
   }
 
-  return RequirementEvaluationResult.NOT_MET;
+  return RequirementStatus.NOT_MET;
 };
 
 /**
@@ -33,14 +34,14 @@ const meetsAgeRequirement = (
 export const handleAgeRequirement: CriteriaHandler<AgeRequirementCriteria> = (
   criteria,
   value
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   if (value === null) {
-    return RequirementEvaluationResult.PENDING;
+    return RequirementStatus.PENDING;
   }
 
   const validationResult = ageRequirementValueSchema.safeParse(value);
   if (!validationResult.success) {
-    return RequirementEvaluationResult.NOT_MET;
+    return RequirementStatus.NOT_MET;
   }
 
   return meetsAgeRequirement(validationResult.data.age, criteria);
@@ -52,7 +53,7 @@ export const handleAgeRequirement: CriteriaHandler<AgeRequirementCriteria> = (
 export const evaluateAgeRequirement = (
   criteria: unknown,
   value: unknown
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   if (!isAgeRequirementCriteria(criteria)) {
     throw new Error('Invalid age requirement criteria');
   }

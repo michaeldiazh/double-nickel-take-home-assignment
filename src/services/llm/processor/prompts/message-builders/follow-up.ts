@@ -14,6 +14,7 @@ const buildJSONResponseInstruction = (requirementType: string): string => `
     - Return ONLY the JSON object, no additional text or explanation. This ensures accurate parsing of the candidate's response.
     - The "assessment" field should be your judgment: "MET" if the candidate meets the requirement, "NOT_MET" if they don't, or "PENDING" if you need more information.
     - The "confidence" field (optional) should be a number between 0.0 and 1.0 representing how confident you are in your assessment. Higher values indicate greater confidence.
+    - The "message" field should contain the conversational message to send to the candidate. Be friendly, professional, and clear. Include any follow-up questions if needed.
 `;
 
 const buildGuidelineListForFollowUp = (): string[] => ([

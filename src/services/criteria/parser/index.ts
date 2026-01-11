@@ -41,19 +41,19 @@ const parserContextMap: Record<JobRequirementType, ParserContext<any>> = {
 const extractValue = <T extends ConversationRequirementValue>(content: string, parserContext: ParserContext<T>): ParseResult<T> => {
     const {valueSchema} = parserContext;
     
-    // Extract assessment and confidence from content (may be in JSON or text)
-    const {assessment, confidence} = extractAssessmentAndConfidence(content);
+    // Extract assessment, confidence, and message from content (may be in JSON or text)
+    const {assessment, confidence, message} = extractAssessmentAndConfidence(content);
     
     // Always try to extract from JSON payload first (more structured and validated)
     const jsonResult = extractValueFromPayload(content, valueSchema);
     if (jsonResult) {
-        return buildSuccessParseResult(jsonResult, assessment, confidence);
+        return buildSuccessParseResult(jsonResult, assessment, confidence, message);
     }
     
     // Try to extract from natural language text as fallback
     const textResult = parserContext.extractValueFromText(content);
     if (textResult) {
-        return buildSuccessParseResult(textResult, assessment, confidence);
+        return buildSuccessParseResult(textResult, assessment, confidence, message);
     }
 
     // Both methods failed

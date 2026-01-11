@@ -1,4 +1,4 @@
-import { JobRequirementType } from '../criteria-types';
+import { ConversationRequirementValue, JobRequirementCriteria, JobRequirementType } from '../criteria-types';
 import { RequirementEvaluationResult } from './types';
 import { evaluateCDLClass } from './cdl-class-handler';
 import { evaluateYearsExperience } from './years-experience-handler';
@@ -9,6 +9,7 @@ import { evaluatePhysicalExam } from './physical-exam-handler';
 import { evaluateDrugTest } from './drug-test-handler';
 import { evaluateBackgroundCheck } from './background-check-handler';
 import { evaluateGeographicRestriction } from './geographic-restriction-handler';
+import { RequirementStatus } from '../../../entities/conversation-job-requirement/domain';
 
 /**
  * Handler function type for evaluating a requirement.
@@ -16,7 +17,7 @@ import { evaluateGeographicRestriction } from './geographic-restriction-handler'
 type CriteriaHandlerFunction = (
   criteria: unknown,
   value: unknown
-) => RequirementEvaluationResult;
+) => RequirementStatus;
 
 /**
  * Router mapping requirement types to their evaluation handlers.
@@ -45,13 +46,11 @@ const criteriaRouter: CriteriaRouter = {
  * @throws Error if the requirement type is not supported or criteria is invalid
  */
 export const evaluateRequirement = (
-  requirementType: string,
-  criteria: unknown,
-  value: unknown
-): RequirementEvaluationResult => {
-  // Normalize requirement type to enum value
-  const normalizedType = requirementType.toUpperCase() as JobRequirementType;
-  const handler = criteriaRouter[normalizedType];
+  requirementType: JobRequirementType,
+  criteria: JobRequirementCriteria,
+  value: ConversationRequirementValue
+): RequirementStatus => {
+  const handler = criteriaRouter[requirementType];
   if (!handler) {
     throw new Error(`Unsupported requirement type: ${requirementType}`);
   }

@@ -1,17 +1,16 @@
 /**
- * Central export point for all entity types
+ * Entity exports - simplified, snake_case throughout
  */
-export * from './enums';
-export * from './address';
-export * from './job-facts-type';
-export * from './job-requirement-type';
+
+// Core entities
+export * from './message';
+export * from './conversation';
+export * from './conversation-job-requirement';
+export * from './job-requirement';
+export * from './job-fact';
+export * from './application';
 export * from './user';
 export * from './job';
-export * from './job-facts';
-export * from './job-requirements';
-export * from './application';
-export * from './conversation';
-export * from './message';
-export * from './conversation-requirements';
-export * from './llm-evaluation-audit';
 
+// Enums
+export * from './enums';

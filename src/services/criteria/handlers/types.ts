@@ -1,3 +1,5 @@
+import { RequirementStatus } from "../../../entities/conversation-job-requirement/domain";
+
 /**
  * Result of evaluating a requirement against a user's response.
  */
@@ -21,5 +23,5 @@ export enum RequirementEvaluationResult {
 export type CriteriaHandler<TCriteria> = (
   criteria: TCriteria,
   value: unknown | null
-) => RequirementEvaluationResult;
+) => RequirementStatus;
 

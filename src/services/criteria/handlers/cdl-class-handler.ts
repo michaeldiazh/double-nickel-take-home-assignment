@@ -5,6 +5,7 @@ import {
   CDLClass,
 } from '../criteria-types';
 import { CriteriaHandler, RequirementEvaluationResult } from './types';
+import { RequirementStatus } from '../../../entities/conversation-job-requirement/domain';
 
 /**
  * CDL Class hierarchy: A > B > C (A can drive everything, B can drive B and C, C can only drive C)
@@ -21,15 +22,15 @@ const classHierarchy: Record<CDLClass, number> = { [CDLClass.A]: 3, [CDLClass.B]
 const meetsCDLClassRequirement = (
   userCDLClass: CDLClass,
   requiredCDLClass: CDLClass
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   const requiredLevel = classHierarchy[requiredCDLClass];
   const userLevel = classHierarchy[userCDLClass];
 
   if (userLevel >= requiredLevel) {
-    return RequirementEvaluationResult.MET;
+    return RequirementStatus.MET;
   }
 
-  return RequirementEvaluationResult.NOT_MET;
+  return RequirementStatus.NOT_MET;
 };
 
 /**
@@ -42,14 +43,14 @@ const meetsCDLClassRequirement = (
 export const handleCDLClass: CriteriaHandler<CDLClassCriteria> = (
   criteria,
   value
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   if (value === null) {
-    return RequirementEvaluationResult.PENDING;
+    return RequirementStatus.PENDING;
   }
 
   const validationResult = cdlClassValueSchema.safeParse(value);
   if (!validationResult.success) {
-    return RequirementEvaluationResult.NOT_MET;
+    return RequirementStatus.NOT_MET;
   }
 
   return meetsCDLClassRequirement(validationResult.data.cdl_class, criteria.cdl_class);
@@ -61,7 +62,7 @@ export const handleCDLClass: CriteriaHandler<CDLClassCriteria> = (
 export const evaluateCDLClass = (
   criteria: unknown,
   value: unknown
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   if (!isCDLClassCriteria(criteria)) {
     throw new Error('Invalid CDL class criteria');
   }
