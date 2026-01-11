@@ -1,17 +1,22 @@
 import {getResponseFormatDescription} from "../../../../criteria/response-format";
-import {JobRequirements} from "../../../../../entities";
+import {JobRequirement} from "../../../../../entities";
 
 const buildFirstRequirementHeaderLine = (jobName: string): string => `
    Okay, chat! Here the a requirement for ${jobName}.:
 `;
 
+const buildFocusList = (requirement: JobRequirement): string[] => {
+    // Check if criteria has 'required' field (some criteria types have it)
+    const isRequired = (requirement.criteria as any)?.required ?? true;
+    
+    return [
+        `- You are currently asking about: ${requirement.requirement_description}`,
+        `- This is a ${isRequired ? 'required' : 'preferred'} requirement`,
+        `- Requirement type: ${requirement.requirement_type}`,
+        `- Criteria: ${JSON.stringify(requirement.criteria)}`,
+    ];
+};
 
-const buildFocusList = (requirements: JobRequirements): string[] => ([
-    `- You are currently asking about: ${requirements.jobRequirementType.requirementDescription}`,
-    `- This is a ${requirements.criteria.isRequired ? 'required' : 'preferred'} requirement`,
-    `- Requirement type: ${requirements.jobRequirementType.requirementType}`,
-    `- Criteria: ${JSON.stringify(requirements.criteria.criteria)}`,
-])
 const buildJSONResponseInstruction = (requirementType: string): string => `
     When you have collected enough information to evaluate this requirement, you MUST return your assessment in the following exact JSON format:
     ${getResponseFormatDescription(requirementType)}
@@ -20,6 +25,7 @@ const buildJSONResponseInstruction = (requirementType: string): string => `
     - Return ONLY the JSON object, no additional text or explanation. This ensures accurate parsing of the candidate's response.
     - The "assessment" field should be your judgment: "MET" if the candidate meets the requirement, "NOT_MET" if they don't, or "PENDING" if you need more information.
     - The "confidence" field (optional) should be a number between 0.0 and 1.0 representing how confident you are in your assessment. Higher values indicate greater confidence.
+    - The "message" field should contain the conversational message to send to the candidate. Be friendly, professional, and clear. Include any follow-up questions if needed.
 `;
 
 const buildGuidelineListWithRequirement = (): string[] => ([
@@ -34,11 +40,11 @@ const buildGuidelineListWithRequirement = (): string[] => ([
 
 export const buildRequirementSystemMessage = (
     jobName: string,
-    requirements: JobRequirements
+    requirement: JobRequirement
 ): string => {
     const heading = buildFirstRequirementHeaderLine(jobName);
-    const focusList = buildFocusList(requirements).join('\n');
-    const responseFormat = buildJSONResponseInstruction(requirements.jobRequirementType.requirementType);
+    const focusList = buildFocusList(requirement).join('\n');
+    const responseFormat = buildJSONResponseInstruction(requirement.requirement_type);
     const guidelines = buildGuidelineListWithRequirement().join('\n');
     return `
         ${heading}

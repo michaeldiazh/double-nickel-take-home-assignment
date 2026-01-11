@@ -1,3 +1,4 @@
+import { RequirementStatus } from '../../../entities/conversation-job-requirement/domain';
 import {
   GeographicRestrictionCriteria,
   geographicRestrictionValueSchema,
@@ -16,20 +17,20 @@ import { CriteriaHandler, RequirementEvaluationResult } from './types';
 const meetsGeographicRestrictionRequirement = (
   userState: string | undefined,
   criteria: GeographicRestrictionCriteria
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   if (!criteria.required) {
-    return RequirementEvaluationResult.MET;
+    return RequirementStatus.MET;
   }
 
   const hasAllowedStates = criteria.allowed_states && criteria.allowed_states.length > 0;
   const hasAllowedRegions = criteria.allowed_regions && criteria.allowed_regions.length > 0;
 
   if (!hasAllowedStates && !hasAllowedRegions) {
-    return RequirementEvaluationResult.MET;
+    return RequirementStatus.MET;
   }
 
   if (!userState) {
-    return RequirementEvaluationResult.PENDING;
+    return RequirementStatus.PENDING;
   }
 
   const userStateInAllowedStates = hasAllowedStates && criteria.allowed_states!.includes(userState);
@@ -41,25 +42,25 @@ const meetsGeographicRestrictionRequirement = (
     // Only check if the state code happens to match a region name exactly
     const userStateInAllowedRegions = criteria.allowed_regions!.includes(userState);
     if (userStateInAllowedRegions) {
-      return RequirementEvaluationResult.MET;
+      return RequirementStatus.MET;
     }
     // Ambiguous: state code vs region name - need more info
-    return RequirementEvaluationResult.PENDING;
+    return RequirementStatus.PENDING;
   }
 
   // If we have allowed_states, check against them
   if (hasAllowedStates) {
     if (userStateInAllowedStates) {
-      return RequirementEvaluationResult.MET;
+      return RequirementStatus.MET;
     }
     // If we also have regions, check if state matches a region name
     if (hasAllowedRegions && criteria.allowed_regions!.includes(userState)) {
-      return RequirementEvaluationResult.MET;
+      return RequirementStatus.MET;
     }
-    return RequirementEvaluationResult.NOT_MET;
+    return RequirementStatus.NOT_MET;
   }
 
-  return RequirementEvaluationResult.NOT_MET;
+  return RequirementStatus.NOT_MET;
 };
 
 /**
@@ -72,14 +73,14 @@ const meetsGeographicRestrictionRequirement = (
 export const handleGeographicRestriction: CriteriaHandler<GeographicRestrictionCriteria> = (
   criteria,
   value
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   if (value === null) {
-    return RequirementEvaluationResult.PENDING;
+    return RequirementStatus.PENDING;
   }
 
   const validationResult = geographicRestrictionValueSchema.safeParse(value);
   if (!validationResult.success) {
-    return RequirementEvaluationResult.NOT_MET;
+    return RequirementStatus.NOT_MET;
   }
 
   return meetsGeographicRestrictionRequirement(validationResult.data.state, criteria);
@@ -91,7 +92,7 @@ export const handleGeographicRestriction: CriteriaHandler<GeographicRestrictionC
 export const evaluateGeographicRestriction = (
   criteria: unknown,
   value: unknown
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   if (!isGeographicRestrictionCriteria(criteria)) {
     throw new Error('Invalid geographic restriction criteria');
   }

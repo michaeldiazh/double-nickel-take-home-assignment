@@ -85,10 +85,10 @@ export const extractValueFromPayload = <T extends ConversationRequirementValue>(
     const jsonObject = extractJSONObject(context);
     if (!jsonObject) return null;
     
-    // Remove assessment and confidence fields before validating with value schema
+    // Remove assessment, confidence, and message fields before validating with value schema
     // The value schema should only contain requirement-specific fields
     // We explicitly exclude these fields to avoid any potential schema validation issues
-    const { assessment: _assessment, confidence: _confidence, ...valueFields } = jsonObject;
+    const { assessment: _assessment, confidence: _confidence, message: _message, ...valueFields } = jsonObject;
     
     const result = valueSchema.safeParse(valueFields);
     if (result.success) return result.data;
@@ -96,20 +96,25 @@ export const extractValueFromPayload = <T extends ConversationRequirementValue>(
 };
 
 /**
- * Extracts assessment and confidence from the full JSON response.
+ * Extracts assessment, confidence, and message from the full JSON response.
  * These fields are separate from the requirement-specific value.
  * 
  * @param context - The LLM response content
- * @returns Object with assessment and confidence, or null values if not present/invalid
+ * @returns Object with assessment, confidence, and message, or null values if not present/invalid
  */
-export const extractAssessmentAndConfidence = (context: string): { assessment: RequirementStatus | null; confidence: number | null } => {
+export const extractAssessmentAndConfidence = (context: string): { 
+    assessment: RequirementStatus | null; 
+    confidence: number | null;
+    message: string | null;
+} => {
     const jsonObject = extractJSONObject(context);
     if (!jsonObject) {
-        return { assessment: null, confidence: null };
+        return { assessment: null, confidence: null, message: null };
     }
     
     const assessmentResult = assessmentSchema.safeParse(jsonObject.assessment);
     const confidenceResult = confidenceSchema.safeParse(jsonObject.confidence);
+    const messageResult = typeof jsonObject.message === 'string' ? jsonObject.message : null;
     
     return {
         assessment: assessmentResult.success && assessmentResult.data !== null && assessmentResult.data !== undefined 
@@ -118,27 +123,31 @@ export const extractAssessmentAndConfidence = (context: string): { assessment: R
         confidence: confidenceResult.success && confidenceResult.data !== null && confidenceResult.data !== undefined 
             ? confidenceResult.data 
             : null,
+        message: messageResult,
     };
 };
 
 /**
- * Builds a successful parse result with the extracted value, assessment, and confidence.
+ * Builds a successful parse result with the extracted value, assessment, confidence, and message.
  * 
  * @param value - The parsed requirement-specific value
  * @param assessment - The LLM's assessment (optional)
  * @param confidence - The LLM's confidence level (optional)
+ * @param message - The conversational message to send to the candidate (optional)
  * @returns ParseResult with all extracted fields
  */
 export const buildSuccessParseResult = <T extends ConversationRequirementValue>(
     value: T,
     assessment?: RequirementStatus | null,
-    confidence?: number | null
+    confidence?: number | null,
+    message?: string | null
 ): ParseResult<T> => ({
     success: true,
     value,
     needsClarification: false,
     assessment: assessment ?? null,
     confidence: confidence ?? null,
+    message: message ?? null,
 });
 
 /**
@@ -155,3 +164,55 @@ export const buildFailureParseResult = (error: string): ParseResult<never> => ({
     assessment: null,
     confidence: null,
 });
+
+/**
+ * Removes JSON objects and JSON code blocks from text, keeping only the conversational content.
+ * This is used to clean assistant messages before sending them to users, removing internal evaluation JSON.
+ * 
+ * @param text - The text that may contain JSON
+ * @returns The text with JSON removed
+ */
+export const removeJSONFromText = (text: string): string => {
+    let cleaned = text;
+    
+    // Remove JSON in markdown code blocks (```json ... ``` or ``` ... ```)
+    cleaned = cleaned.replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/g, '');
+    
+    // Remove JSON objects - try to match the largest JSON object (greedy, like extractJSON)
+    // Start from the end and work backwards to find complete JSON objects
+    // For each potential JSON object, check if it's valid JSON and remove it
+    const jsonPattern = /\{[\s\S]*\}/g;
+    let match;
+    const matches: Array<{ start: number; end: number; text: string }> = [];
+    
+    while ((match = jsonPattern.exec(cleaned)) !== null) {
+        const jsonCandidate = match[0];
+        // Check if this looks like JSON (contains quotes and colons)
+        if (jsonCandidate.includes('"') && jsonCandidate.includes(':')) {
+            // Try to parse it to verify it's valid JSON
+            try {
+                JSON.parse(jsonCandidate);
+                matches.push({ start: match.index, end: match.index + jsonCandidate.length, text: jsonCandidate });
+            } catch {
+                // Not valid JSON, skip it
+            }
+        }
+    }
+    
+    // Remove matches from end to start to preserve indices
+    matches.reverse().forEach(({ start, end }) => {
+        cleaned = cleaned.substring(0, start) + cleaned.substring(end);
+    });
+    
+    // Remove lines that mention "assessment", "evaluation", or "provide" (intro lines before JSON)
+    cleaned = cleaned.replace(/^.*(?:will now provide|assessment|evaluation).*:?\s*$/gmi, '');
+    
+    // Clean up multiple consecutive newlines
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+    
+    // Remove empty lines at the start/end
+    cleaned = cleaned.replace(/^\n+|\n+$/g, '');
+    
+    // Trim whitespace
+    return cleaned.trim();
+};

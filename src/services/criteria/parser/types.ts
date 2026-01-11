@@ -45,6 +45,13 @@ export interface ParseResult<T extends ConversationRequirementValue> {
    * Optional because the field is optional in the prompt and may not always be present.
    */
   confidence?: number | null;
+
+  /**
+   * The conversational message to send to the candidate.
+   * This is extracted from the "message" field in the LLM's JSON response.
+   * If not present, falls back to the raw response content.
+   */
+  message?: string | null;
 }
 
 export interface ParserContext<T extends ConversationRequirementValue> {

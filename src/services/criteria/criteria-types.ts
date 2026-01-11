@@ -16,6 +16,10 @@ export enum JobRequirementType {
   GEOGRAPHIC_RESTRICTION = 'GEOGRAPHIC_RESTRICTION',
 }
 
+export const isJobRequirementType = (value: any): value is JobRequirementType => {
+  return Object.values(JobRequirementType).includes(value);
+};
+
 /**
  * Base schema for criteria that has a required field.
  * This is a common pattern across many criteria types.

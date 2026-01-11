@@ -1,3 +1,4 @@
+import { RequirementStatus } from '../../../entities/conversation-job-requirement/domain';
 import {
   DrugTestCriteria,
   drugTestValueSchema,
@@ -17,15 +18,15 @@ const meetsDrugTestRequirement = (
   userAgreesToPreEmployment: boolean,
   userAgreesToRandomTesting: boolean | undefined,
   criteria: DrugTestCriteria
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   const preEmploymentMet = !criteria.pre_employment || userAgreesToPreEmployment;
   const randomTestingMet = !criteria.random_testing || userAgreesToRandomTesting === true;
 
   if (preEmploymentMet && randomTestingMet) {
-    return RequirementEvaluationResult.MET;
+    return RequirementStatus.MET;
   }
 
-  return RequirementEvaluationResult.NOT_MET;
+  return RequirementStatus.NOT_MET;
 };
 
 /**
@@ -38,14 +39,14 @@ const meetsDrugTestRequirement = (
 export const handleDrugTest: CriteriaHandler<DrugTestCriteria> = (
   criteria,
   value
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   if (value === null) {
-    return RequirementEvaluationResult.PENDING;
+    return RequirementStatus.PENDING;
   }
 
   const validationResult = drugTestValueSchema.safeParse(value);
   if (!validationResult.success) {
-    return RequirementEvaluationResult.NOT_MET;
+    return RequirementStatus.NOT_MET;
   }
 
   return meetsDrugTestRequirement(
@@ -61,7 +62,7 @@ export const handleDrugTest: CriteriaHandler<DrugTestCriteria> = (
 export const evaluateDrugTest = (
   criteria: unknown,
   value: unknown
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   if (!isDrugTestCriteria(criteria)) {
     throw new Error('Invalid drug test criteria');
   }

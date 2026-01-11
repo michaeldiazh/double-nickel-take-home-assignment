@@ -1,3 +1,4 @@
+import { RequirementStatus } from '../../../entities/conversation-job-requirement/domain';
 import {
   YearsExperienceCriteria,
   yearsExperienceValueSchema,
@@ -15,15 +16,15 @@ import { CriteriaHandler, RequirementEvaluationResult } from './types';
 const meetsYearsRequirement = (
   userYears: number,
   criteria: YearsExperienceCriteria
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   const meetsMinimumYears = userYears >= criteria.min_years;
   const isOnlyPreferred = criteria.preferred && !criteria.required;
 
   if (isOnlyPreferred || meetsMinimumYears) {
-    return RequirementEvaluationResult.MET;
+    return RequirementStatus.MET;
   }
 
-  return RequirementEvaluationResult.NOT_MET;
+  return RequirementStatus.NOT_MET;
 };
 
 /**
@@ -36,13 +37,13 @@ const meetsYearsRequirement = (
 export const handleYearsExperience: CriteriaHandler<YearsExperienceCriteria> = (
   criteria,
   value
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   if (value === null) {
-    return RequirementEvaluationResult.PENDING;
+    return RequirementStatus.PENDING;
   } 
   const validationResult = yearsExperienceValueSchema.safeParse(value);
   if (!validationResult.success) {
-    return RequirementEvaluationResult.NOT_MET;
+    return RequirementStatus.NOT_MET;
   }
   return meetsYearsRequirement(validationResult.data.years_experience, criteria);
 };
@@ -53,7 +54,7 @@ export const handleYearsExperience: CriteriaHandler<YearsExperienceCriteria> = (
 export const evaluateYearsExperience = (
   criteria: unknown,
   value: unknown
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   if (!isYearsExperienceCriteria(criteria)) {
     throw new Error('Invalid years experience criteria');
   }

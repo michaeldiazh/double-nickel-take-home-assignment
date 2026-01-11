@@ -1,10 +1,5 @@
 /**
  * Database module exports
+ * Simplified - only connection pool needed
  */
 export { pool, closePool } from './connection';
-export type {
-  FieldsAndValues,
-  QueryWithValues,
-  UpdateData,
-} from './types';
-

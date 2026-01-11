@@ -1,3 +1,4 @@
+import { RequirementStatus } from '../../../entities/conversation-job-requirement/domain';
 import {
   PhysicalExamCriteria,
   physicalExamValueSchema,
@@ -15,16 +16,16 @@ import { CriteriaHandler, RequirementEvaluationResult } from './types';
 const meetsPhysicalExamRequirement = (
   userHasPhysical: boolean,
   criteria: PhysicalExamCriteria
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   if (!criteria.current_dot_physical) {
-    return RequirementEvaluationResult.MET;
+    return RequirementStatus.MET;
   }
 
   if (userHasPhysical) {
-    return RequirementEvaluationResult.MET;
+    return RequirementStatus.MET;
   }
 
-  return RequirementEvaluationResult.NOT_MET;
+  return RequirementStatus.NOT_MET;
 };
 
 /**
@@ -37,14 +38,14 @@ const meetsPhysicalExamRequirement = (
 export const handlePhysicalExam: CriteriaHandler<PhysicalExamCriteria> = (
   criteria,
   value
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   if (value === null) {
-    return RequirementEvaluationResult.PENDING;
+    return RequirementStatus.PENDING;
   }
 
   const validationResult = physicalExamValueSchema.safeParse(value);
   if (!validationResult.success) {
-    return RequirementEvaluationResult.NOT_MET;
+    return RequirementStatus.NOT_MET;
   }
 
   return meetsPhysicalExamRequirement(validationResult.data.has_current_dot_physical, criteria);
@@ -56,7 +57,7 @@ export const handlePhysicalExam: CriteriaHandler<PhysicalExamCriteria> = (
 export const evaluatePhysicalExam = (
   criteria: unknown,
   value: unknown
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   if (!isPhysicalExamCriteria(criteria)) {
     throw new Error('Invalid physical exam criteria');
   }

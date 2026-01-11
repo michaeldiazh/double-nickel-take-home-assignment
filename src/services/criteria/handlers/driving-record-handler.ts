@@ -1,3 +1,4 @@
+import { RequirementStatus } from '../../../entities/conversation-job-requirement/domain';
 import {
   DrivingRecordCriteria,
   drivingRecordValueSchema,
@@ -17,14 +18,14 @@ const meetsDrivingRecordRequirement = (
   violations: number,
   accidents: number,
   criteria: DrivingRecordCriteria
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   const violationsWithinLimit = violations <= criteria.max_violations;
   const accidentsWithinLimit = accidents <= criteria.max_accidents;
 
   if (violationsWithinLimit && accidentsWithinLimit) {
-    return RequirementEvaluationResult.MET;
+    return RequirementStatus.MET;
   }
-  return RequirementEvaluationResult.NOT_MET;
+  return RequirementStatus.NOT_MET;
 };
 
 /**
@@ -37,14 +38,14 @@ const meetsDrivingRecordRequirement = (
 export const handleDrivingRecord: CriteriaHandler<DrivingRecordCriteria> = (
   criteria,
   value
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   if (value === null) {
-    return RequirementEvaluationResult.PENDING;
+    return RequirementStatus.PENDING;
   }
 
   const validationResult = drivingRecordValueSchema.safeParse(value);
   if (!validationResult.success) {
-    return RequirementEvaluationResult.NOT_MET;
+    return RequirementStatus.NOT_MET;
   }
 
   return meetsDrivingRecordRequirement(
@@ -60,7 +61,7 @@ export const handleDrivingRecord: CriteriaHandler<DrivingRecordCriteria> = (
 export const evaluateDrivingRecord = (
   criteria: unknown,
   value: unknown
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   if (!isDrivingRecordCriteria(criteria)) {
     throw new Error('Invalid driving record criteria');
   }

@@ -1,3 +1,4 @@
+import { RequirementStatus } from '../../../entities/conversation-job-requirement/domain';
 import {
   EndorsementsCriteria,
   EndorsementsValue,
@@ -86,12 +87,12 @@ const buildEndorsementResults = (
 const checkAllEndorsements = (
   criteria: EndorsementsCriteria,
   value: EndorsementsValue
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   const endorsementResults = buildEndorsementResults(criteria, value);
   if(endorsementResults.every((result) => result)){
-    return RequirementEvaluationResult.MET;
+    return RequirementStatus.MET;
   }
-  return RequirementEvaluationResult.NOT_MET;
+  return RequirementStatus.NOT_MET;
 };
 
 /**
@@ -104,13 +105,13 @@ const checkAllEndorsements = (
 export const handleEndorsements: CriteriaHandler<EndorsementsCriteria> = (
   criteria,
   value
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   if (value === null) {
-    return RequirementEvaluationResult.PENDING;
+    return RequirementStatus.PENDING;
   }
   const validationResult = endorsementsValueSchema.safeParse(value);
   if (!validationResult.success) {
-    return RequirementEvaluationResult.NOT_MET;
+    return RequirementStatus.NOT_MET;
   }
   return checkAllEndorsements(criteria, validationResult.data);
 };
@@ -121,7 +122,7 @@ export const handleEndorsements: CriteriaHandler<EndorsementsCriteria> = (
 export const evaluateEndorsements = (
   criteria: unknown,
   value: unknown
-): RequirementEvaluationResult => {
+): RequirementStatus => {
   if (!isEndorsementsCriteria(criteria)) {
     throw new Error('Invalid endorsements criteria');
   }

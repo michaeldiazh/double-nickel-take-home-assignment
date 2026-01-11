@@ -1,12 +1,11 @@
 import {ChatMessage} from "../../../client";
-import {ConversationRequirements, JobRequirements, RequirementStatus,} from "../../../../../entities";
+import {ConversationJobRequirement, JobRequirement, RequirementStatus} from "../../../../../entities";
 import {isRequiredCriteria, JobRequirementCriteria} from "../../../../criteria/criteria-types";
 import {ConversationContext} from "../prompt-context";
 
 const buildHeading = () => `
     Here's the current context of our conversation, chat:
 `
-
 
 /**
  * Builds the conversation history section from message history.
@@ -30,7 +29,7 @@ export const buildConversationHistory = (messageHistory: ChatMessage[]): string 
  * @returns Formatted overview section string
  */
 export const buildRequirementsOverviewSection = (
-    conversationRequirements: ConversationRequirements[]
+    conversationRequirements: ConversationJobRequirement[]
 ): string => {
     const countByStatus = (status: RequirementStatus) => conversationRequirements.filter(cr => cr.status === status).length;
     return `## Job Requirements Overview
@@ -48,13 +47,13 @@ export const buildRequirementsOverviewSection = (
  * @returns Formatted current requirement details string
  */
 export const buildCurrentRequirementDetailsSection = (
-    currentRequirement: JobRequirements
+    currentRequirement: JobRequirement
 ): string => {
-    const {jobRequirementType} = currentRequirement;
     const buildIsRequiredLine = (criteria: JobRequirementCriteria): string => isRequiredCriteria(criteria) ? 'Yes' : 'No (Preferred)';
     const buildCriteriaLine = (criteria: JobRequirementCriteria): string => JSON.stringify(criteria);
     return `## Current Requirement
-          - Type: ${jobRequirementType.requirementType}
+          - Type: ${currentRequirement.requirement_type}
+          - Description: ${currentRequirement.requirement_description}
           - Priority: ${currentRequirement.priority}
           - Required: ${buildIsRequiredLine(currentRequirement.criteria)}
           - Criteria: ${buildCriteriaLine(currentRequirement.criteria)}`;
@@ -67,27 +66,37 @@ export const buildCurrentRequirementDetailsSection = (
  * @returns Formatted previously collected value string
  */
 export const buildPreviouslyCollectedValueSection = (
-    conversationRequirement: ConversationRequirements
+    conversationRequirement: ConversationJobRequirement
 ): string => {
-    return `Previously collected value: ${JSON.stringify(conversationRequirement.value)}`;
+    if (!conversationRequirement.extracted_value) {
+        return 'Previously collected value: None (first time asking)';
+    }
+    return `Previously collected value: ${JSON.stringify(conversationRequirement.extracted_value)}`;
 };
 
 
 export const buildSystemContextMessage = (
     context: ConversationContext
 ): string => {
-    const {conversationRequirements, currentRequirement, messageHistory} = context;
-    const conversationRequirement = conversationRequirements.find(
-        cr => cr.jobRequirements.id === currentRequirement.id
-    )!;
-    if (!conversationRequirement) {
-        throw new Error(`Conversation requirement not found for requirement ID: ${currentRequirement.id}`);
+    const {conversation_requirements, current_requirement, message_history} = context;
+    
+    let requirementDetails = '';
+    if (current_requirement) {
+        const conversationRequirement = conversation_requirements.find(
+            cr => cr.job_requirement_id === current_requirement.id
+        );
+        if (conversationRequirement) {
+            requirementDetails = `
+    ${buildCurrentRequirementDetailsSection(current_requirement)}
+    ${buildPreviouslyCollectedValueSection(conversationRequirement)}
+    `;
+        }
     }
+    
     return `
     ${buildHeading()}
-    ${buildConversationHistory(messageHistory)}
-    ${buildRequirementsOverviewSection(conversationRequirements)}
-    ${buildCurrentRequirementDetailsSection(currentRequirement)}
-    ${buildPreviouslyCollectedValueSection(conversationRequirement!)}
+    ${buildConversationHistory(message_history)}
+    ${buildRequirementsOverviewSection(conversation_requirements)}
+    ${requirementDetails}
   `;
 }
