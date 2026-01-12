@@ -8,6 +8,7 @@ import { Job } from '../../entities/job/domain';
  * Zod schema for job response
  */
 const jobResponseSchema = z.object({
+  id: z.string().uuid(),
   jobName: z.string(),
   jobDescription: z.string(),
   jobLocation: z.string(),
@@ -26,6 +27,7 @@ const jobsListResponseSchema = z.array(jobResponseSchema);
  */
 const buildJobResponse = (job: Job): JobResponse => {
   return {
+    id: job.id,
     jobName: job.name,
     jobDescription: job.description,
     jobLocation: job.location || '',

@@ -29,6 +29,8 @@ DROP TYPE IF EXISTS public.conversation_status_enum CASCADE;
 DROP TYPE IF EXISTS public.message_sender_enum CASCADE;
 DROP TYPE IF EXISTS public.requirement_status_enum CASCADE;
 DROP TYPE IF EXISTS public.screening_decision_enum CASCADE;
+DROP TYPE IF EXISTS public.job_requirement_type_enum CASCADE;
+DROP TYPE IF EXISTS public.job_fact_type_enum CASCADE;
 
 -- Drop extension (optional - only if you want to remove it completely)
 -- DROP EXTENSION IF EXISTS "uuid-ossp" CASCADE;

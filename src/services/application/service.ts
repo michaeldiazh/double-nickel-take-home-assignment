@@ -73,4 +73,15 @@ export class ApplicationService {
   async getApplicationsWithJobAndConversationByUserId(userId: string) {
     return await this.applicationRepo.getApplicationsWithJobAndConversationByUserId(userId);
   }
+
+  /**
+   * Delete an application by ID.
+   * This will cascade delete the conversation and all related data.
+   * 
+   * @param applicationId - The application ID to delete
+   * @returns true if application was deleted, false if not found
+   */
+  async deleteApplication(applicationId: string): Promise<boolean> {
+    return await this.applicationRepo.delete(applicationId);
+  }
 }

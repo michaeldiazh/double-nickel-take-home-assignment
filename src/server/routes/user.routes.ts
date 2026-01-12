@@ -35,6 +35,8 @@ type LoginRequest = z.infer<typeof loginRequestSchema>;
  * Zod schema for job application with screening decision
  */
 const jobApplicationSchema = z.object({
+  applicationId: z.uuidv4(),
+  jobId: z.uuidv4(),
   jobName: z.string(),
   jobDescription: z.string(),
   jobLocation: z.string(),
@@ -77,6 +79,8 @@ const getUserWithApplications = async (
   // Map to job applications with Zod validation
   const jobApplications: JobApplication[] = applications.map((app) => {
     const jobApp = {
+      applicationId: app.application_id,
+      jobId: app.job_id,
       jobName: app.job_name,
       jobDescription: app.job_description,
       jobLocation: app.job_location || '',
@@ -155,6 +159,21 @@ export const createUserRoutes = (pool: Pool): Router => {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: 'Validation error', details: error.issues });
       }
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+
+  router.get('/user/:userId', async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.params;
+      const user = await getUserWithApplications(userId, userRepo, applicationService);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      return res.status(200).json(user);
+    } catch (error) {
+      console.error('Error getting user:', error);
       return res.status(500).json({ error: 'Internal server error' });
     }
   });

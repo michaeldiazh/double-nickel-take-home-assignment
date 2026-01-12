@@ -101,4 +101,18 @@ export class ApplicationRepository {
     const result = await this.client.query(query, [userId]);
     return result.rows;
   }
+
+  /**
+   * Delete an application by ID.
+   * This will cascade delete the conversation and all related data.
+   */
+  async delete(applicationId: string): Promise<boolean> {
+    const query = `
+      DELETE FROM applications
+      WHERE id = $1
+    `;
+    
+    const result = await this.client.query(query, [applicationId]);
+    return result.rowCount !== null && result.rowCount > 0;
+  }
 }

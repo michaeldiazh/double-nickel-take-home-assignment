@@ -122,47 +122,11 @@ export const createConversationSummaryRoutes = (pool: Pool): Router => {
   const applicationRepo = new ApplicationRepository(pool);
   const messageRepo = new MessageRepository(pool);
 
-  /**
-   * GET /conversation-summary/:applicationId - Get summary status for an application
-   */
-  router.get('/conversation-summary/:applicationId', async (req: Request, res: Response) => {
-    try {
-      const { applicationId } = req.params;
-
-      // Validate UUID format
-      const uuidSchema = z.uuidv4();
-      const validatedApplicationId = uuidSchema.parse(applicationId);
-
-      // Get conversation by application ID
-      const conversation = await conversationRepo.getByApplicationId(validatedApplicationId);
-
-      if (!conversation) {
-        return res.status(404).json({ error: 'Conversation not found for this application' });
-      }
-
-      // Map screening decision to summary status
-      const summaryStatus = mapScreeningDecisionToSummaryStatus(conversation.screening_decision);
-
-      // Build response
-      const response: ConversationSummaryResponse = {
-        summaryStatus,
-      };
-
-      // Validate response
-      const validatedResponse = conversationSummaryResponseSchema.parse(response);
-
-      return res.status(200).json(validatedResponse);
-    } catch (error) {
-      console.error('Error fetching conversation summary:', error);
-      if (error instanceof z.ZodError) {
-        if (error.issues.some(issue => issue.path.includes('applicationId'))) {
-          return res.status(400).json({ error: 'Invalid application ID format' });
-        }
-        return res.status(500).json({ error: 'Data validation error', details: error.issues });
-      }
-      return res.status(500).json({ error: 'Internal server error' });
-    }
-  });
+  // Note: GET /conversation-summary/:applicationId endpoint has been removed.
+  // The frontend should get screening decision and summary from:
+  // 1. WebSocket messages (when conversationComplete is true)
+  // 2. GET /conversation-summary/:applicationId/messages (for message download)
+  // 3. Conversation requirements endpoint (for detailed requirement status)
 
   /**
    * GET /conversation-summary/:applicationId/messages - Download messages as text file

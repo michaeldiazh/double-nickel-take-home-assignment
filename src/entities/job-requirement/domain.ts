@@ -2,11 +2,13 @@ import { z } from 'zod';
 import { JobRequirementType } from '../../services/criteria/criteria-types';
 
 /**
- * Base schema for criteria that enforces required field.
- * All job requirements must have criteria.required: boolean
+ * Base schema for criteria that allows required field to be optional.
+ * Some criteria types require the `required` field, others make it optional.
+ * This schema matches the actual database structure where criteria can have
+ * either requiredCriteriaSchema or optionalRequiredCriteriaSchema.
  */
 const jobRequirementCriteriaSchema = z.object({
-  required: z.boolean(),
+  required: z.boolean().optional(),
 }).catchall(z.unknown());
 
 /**

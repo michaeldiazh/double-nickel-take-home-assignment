@@ -61,6 +61,14 @@ Create a new user account.
 }
 ```
 
+**Note:** For new users, `jobApplications` will be an empty array. For existing users with applications, each item in `jobApplications` includes:
+- `applicationId` - UUID of the application (used for deletion)
+- `jobId` - UUID of the job (used to restart/redo application)
+- `jobName` - Name of the job
+- `jobDescription` - Description of the job
+- `jobLocation` - Location of the job
+- `screeningDecision` - Current screening decision (see values below)
+
 **Error Responses:**
 - `400 Bad Request` - Invalid request body (validation errors)
 - `409 Conflict` - User with this email already exists
@@ -111,6 +119,8 @@ Authenticate a user and retrieve their profile with job applications.
   "zipCode": "90210",
   "jobApplications": [
     {
+      "applicationId": "123e4567-e89b-4d3a-a456-426614174001",
+      "jobId": "123e4567-e89b-4d3a-a456-426614174002",
       "jobName": "Truck Driver",
       "jobDescription": "Long-haul truck driver position",
       "jobLocation": "Los Angeles, CA",
@@ -153,12 +163,14 @@ Retrieve all available jobs, ordered by creation date (oldest first).
 ```json
 [
   {
+    "id": "123e4567-e89b-4d3a-a456-426614174000",
     "jobName": "Truck Driver",
     "jobDescription": "Long-haul truck driver position requiring CDL license",
     "jobLocation": "Los Angeles, CA",
     "isActive": true
   },
   {
+    "id": "123e4567-e89b-4d3a-a456-426614174001",
     "jobName": "Delivery Driver",
     "jobDescription": "Local delivery driver position",
     "jobLocation": "San Francisco, CA",
@@ -179,36 +191,36 @@ curl -X GET http://localhost:3000/jobs
 
 ---
 
-### 4. Get Conversation Summary
+### 4. Delete Application
 
-Get the screening decision status for a specific application.
+Delete an application and all associated data (conversation, messages, etc.). This is useful for allowing users to redo an application.
 
-**Endpoint:** `GET /conversation-summary/:applicationId`
+**Endpoint:** `DELETE /application/:applicationId`
 
 **Path Parameters:**
-- `applicationId` (UUID v4) - The application ID
+- `applicationId` (UUID v4) - The application ID to delete
 
 **Response:** `200 OK`
 ```json
 {
-  "summaryStatus": "Approved"
+  "message": "Application deleted successfully"
 }
 ```
 
-**Summary Status Values:**
-- `"Approved"` - Application approved
-- `"Denied"` - Application denied
-- `"Pending"` - Application pending review
-- `"Canceled"` - Application canceled by user
-
 **Error Responses:**
 - `400 Bad Request` - Invalid application ID format (must be UUID v4)
-- `404 Not Found` - Conversation not found for this application
+- `404 Not Found` - Application not found
 - `500 Internal Server Error` - Server error
+
+**Note:** Deleting an application will cascade delete:
+- The associated conversation
+- All messages in that conversation
+- All conversation job requirements
+- All related data
 
 **Example:**
 ```bash
-curl -X GET http://localhost:3000/conversation-summary/123e4567-e89b-4d3a-a456-426614174000
+curl -X DELETE http://localhost:3000/application/123e4567-e89b-4d3a-a456-426614174000
 ```
 
 ---
@@ -300,7 +312,68 @@ The following features are planned for future iterations:
 
 ## WebSocket API
 
-For real-time chat functionality, the API also supports WebSocket connections. WebSocket documentation will be provided separately as it's primarily used for the chat orchestration feature.
+For real-time chat functionality, the API also supports WebSocket connections. When a conversation is completed (status becomes `DONE`), the WebSocket will send a `status_update` message with the following additional fields:
+
+**Completion Message Format:**
+```json
+{
+  "type": "status_update",
+  "conversationId": "123e4567-e89b-4d3a-a456-426614174000",
+  "status": "DONE",
+  "conversationComplete": true,
+  "screeningDecision": "APPROVED",
+  "screeningSummary": "Candidate meets all requirements. Approved for position."
+}
+```
+
+**Fields:**
+- `conversationComplete` (boolean) - `true` when the conversation is finished
+- `screeningDecision` (string) - One of: `"APPROVED"`, `"DENIED"`, `"PENDING"`, `"USER_CANCELED"`
+- `screeningSummary` (string | null) - Summary text explaining the decision, or `null` if not available
+
+**Note:** The frontend should listen for `conversationComplete: true` in WebSocket messages to trigger navigation to the summary page. The screening decision and summary are included in the completion message, so no additional API call is needed.
+
+### Pause and Resume Conversation
+
+The WebSocket API supports pausing and resuming conversations:
+
+**Pause Conversation:**
+```json
+{
+  "type": "pause_conversation",
+  "conversationId": "123e4567-e89b-4d3a-a456-426614174000"
+}
+```
+
+**Response:**
+```json
+{
+  "type": "conversation_paused",
+  "conversationId": "123e4567-e89b-4d3a-a456-426614174000",
+  "status": "ON_REQ",
+  "message": "Conversation paused"
+}
+```
+
+**Continue Conversation:**
+```json
+{
+  "type": "continue_conversation",
+  "conversationId": "123e4567-e89b-4d3a-a456-426614174000"
+}
+```
+
+**Response:**
+```json
+{
+  "type": "conversation_resumed",
+  "conversationId": "123e4567-e89b-4d3a-a456-426614174000",
+  "status": "ON_REQ",
+  "message": "Conversation resumed"
+}
+```
+
+**Note:** When pausing, the conversation status remains unchanged (e.g., `ON_REQ` if there are pending requirements). When resuming, the conversation continues from where it left off. The frontend can continue sending `send_message` events after resuming.
 
 ---
 

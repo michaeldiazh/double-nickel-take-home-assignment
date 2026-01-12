@@ -24,6 +24,7 @@ import {
 import {ConversationContextService} from '../services/conversation-context/service';
 import {createUserRoutes} from './routes/user.routes';
 import {createJobRoutes} from './routes/job.routes';
+import {createApplicationRoutes} from './routes/application.routes';
 import {createConversationSummaryRoutes} from './routes/conversation-summary.routes';
 
 /**
@@ -46,14 +47,28 @@ interface EndConversationMessage {
     conversationId: string;
 }
 
-type ClientMessage = StartConversationMessage | SendMessageMessage | EndConversationMessage;
+interface PauseConversationMessage {
+    type: 'pause_conversation';
+    conversationId: string;
+}
+
+interface ContinueConversationMessage {
+    type: 'continue_conversation';
+    conversationId: string;
+}
+
+type ClientMessage = StartConversationMessage | SendMessageMessage | EndConversationMessage | PauseConversationMessage | ContinueConversationMessage;
 
 interface ServerMessage {
-    type: 'greeting' | 'message' | 'error' | 'status_update' | 'conversation_end';
+    type: 'greeting' | 'message' | 'error' | 'status_update' | 'conversation_end' | 'conversation_paused' | 'conversation_resumed';
     conversationId?: string;
     message?: string;
     status?: ConversationStatus;
     error?: string;
+    // Include conversation completion data when status is DONE
+    screeningDecision?: string;
+    screeningSummary?: string | null;
+    conversationComplete?: boolean;
 }
 
 /**
@@ -175,6 +190,9 @@ const handleStartConversation = async (
             greetingInitialHandler: deps.greetingInitialHandler
         });
 
+        // Track conversationId on this WebSocket connection for disconnect handling
+        (ws as any).conversationId = result.conversationId;
+
         // Send status update after greeting completes
         sendMessage(ws, {
             type: 'status_update',
@@ -262,6 +280,9 @@ const routeSendMessage = async (
     deps: ServerDependencies
 ): Promise<void> => {
     try {
+        // Track conversationId on this WebSocket connection for disconnect handling
+        (ws as any).conversationId = conversationId;
+
         // Get conversation to check status
         const conversation = await deps.conversationRepo.getById(conversationId);
         if (!conversation) {
@@ -283,11 +304,23 @@ const routeSendMessage = async (
 
         // Send status update if status changed
         if (result) {
-            sendMessage(ws, {
+            const statusUpdateMessage: ServerMessage = {
                 type: 'status_update',
                 conversationId,
                 status: result.newStatus,
-            });
+            };
+
+            // If conversation is complete, include screening decision and summary
+            if (result.newStatus === ConversationStatus.DONE) {
+                const updatedConversation = await deps.conversationRepo.getById(conversationId);
+                if (updatedConversation) {
+                    statusUpdateMessage.conversationComplete = true;
+                    statusUpdateMessage.screeningDecision = updatedConversation.screening_decision;
+                    statusUpdateMessage.screeningSummary = updatedConversation.screening_summary;
+                }
+            }
+
+            sendMessage(ws, statusUpdateMessage);
         }
     } catch (error) {
         console.error('Error in routeSendMessage:', error);
@@ -307,6 +340,91 @@ const handleEndConversation = (ws: WebSocket, conversationId: string): void => {
         conversationId,
         message: 'Conversation ended',
     });
+};
+
+/**
+ * Handles the pause_conversation message type.
+ * Acknowledges the pause and sends current conversation status.
+ * 
+ * @param ws - The WebSocket connection
+ * @param conversationId - The conversation ID
+ * @param deps - Server dependencies
+ */
+const handlePauseConversation = async (
+    ws: WebSocket,
+    conversationId: string,
+    deps: ServerDependencies
+): Promise<void> => {
+    try {
+        const conversation = await deps.conversationRepo.getById(conversationId);
+        if (!conversation) {
+            sendError(ws, `Conversation ${conversationId} not found`);
+            return;
+        }
+
+        // Check if there are pending requirements
+        const nextPending = await deps.conversationJobRequirementRepo.getNextPending(conversationId);
+        const hasPendingRequirements = nextPending !== null;
+
+        sendMessage(ws, {
+            type: 'conversation_paused',
+            conversationId,
+            status: conversation.conversation_status,
+            message: 'Conversation paused',
+        });
+    } catch (error) {
+        console.error('Error in handlePauseConversation:', error);
+        sendError(ws, error instanceof Error ? error.message : 'Unknown error');
+    }
+};
+
+/**
+ * Handles the continue_conversation message type.
+ * Resumes the conversation from where it left off.
+ * 
+ * @param ws - The WebSocket connection
+ * @param conversationId - The conversation ID
+ * @param deps - Server dependencies
+ */
+const handleContinueConversation = async (
+    ws: WebSocket,
+    conversationId: string,
+    deps: ServerDependencies
+): Promise<void> => {
+    try {
+        const conversation = await deps.conversationRepo.getById(conversationId);
+        if (!conversation) {
+            sendError(ws, `Conversation ${conversationId} not found`);
+            return;
+        }
+
+        // Send resume acknowledgment with current status
+        sendMessage(ws, {
+            type: 'conversation_resumed',
+            conversationId,
+            status: conversation.conversation_status,
+            message: 'Conversation resumed',
+        });
+
+        // If conversation is DONE, send completion info
+        if (conversation.conversation_status === ConversationStatus.DONE) {
+            sendMessage(ws, {
+                type: 'status_update',
+                conversationId,
+                status: ConversationStatus.DONE,
+                conversationComplete: true,
+                screeningDecision: conversation.screening_decision,
+                screeningSummary: conversation.screening_summary,
+            });
+            return;
+        }
+
+        // For other statuses, the frontend can continue sending messages
+        // The existing handlers will route based on conversation status
+    } catch (error) {
+        console.error('Error in handleContinueConversation:', error);
+        sendError(ws, error instanceof Error ? error.message : 'Unknown error');
+    }
 };
 
 /**
@@ -330,6 +448,12 @@ const handleClientMessage = async (
             break;
         case 'end_conversation':
             handleEndConversation(ws, message.conversationId);
+            break;
+        case 'pause_conversation':
+            await handlePauseConversation(ws, message.conversationId, deps);
+            break;
+        case 'continue_conversation':
+            await handleContinueConversation(ws, message.conversationId, deps);
             break;
         default:
             const messageType = (message as any).type ?? 'undefined';
@@ -368,8 +492,29 @@ const setupWebSocketHandlers = (ws: WebSocket, deps: ServerDependencies): void =
         }
     });
 
-    ws.on('close', () => {
+    ws.on('close', async () => {
         console.log('WebSocket connection closed');
+        
+        // If conversation was just started (PENDING or START status), delete the application
+        const conversationId = (ws as any).conversationId;
+        if (conversationId) {
+            try {
+                const conversation = await deps.conversationRepo.getById(conversationId);
+                if (conversation && 
+                    (conversation.conversation_status === ConversationStatus.PENDING || 
+                     conversation.conversation_status === ConversationStatus.START)) {
+                    // User disconnected early - delete the application (cascades to conversation)
+                    const applicationId = conversation.application_id;
+                    const deleted = await deps.applicationService.deleteApplication(applicationId);
+                    if (deleted) {
+                        console.log(`Application ${applicationId} and conversation ${conversationId} deleted due to early disconnect`);
+                    }
+                }
+            } catch (error) {
+                console.error('Error handling disconnect cleanup:', error);
+                // Don't throw - this is cleanup, shouldn't affect the close
+            }
+        }
     });
 
     ws.on('error', (error) => {
@@ -437,6 +582,7 @@ export class ApplicationGateway {
     private registerRoutes(pool: Pool): void {
         this.app.use('/', createUserRoutes(pool));
         this.app.use('/', createJobRoutes(pool));
+        this.app.use('/', createApplicationRoutes(pool));
         this.app.use('/', createConversationSummaryRoutes(pool));
     }
 

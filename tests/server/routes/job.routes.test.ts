@@ -82,6 +82,7 @@ describe('Job Routes - Route Handler Logic', () => {
     it('should map jobs to response format correctly', () => {
       const job = mockJobs[0];
       const jobResponse = {
+        id: job.id,
         jobName: job.name,
         jobDescription: job.description,
         jobLocation: job.location || '',
@@ -89,6 +90,7 @@ describe('Job Routes - Route Handler Logic', () => {
       };
 
       expect(jobResponse).toEqual({
+        id: jobId1,
         jobName: 'Truck Driver',
         jobDescription: 'Drive trucks across the country',
         jobLocation: 'Los Angeles, CA',
@@ -99,6 +101,7 @@ describe('Job Routes - Route Handler Logic', () => {
     it('should handle jobs with null location', () => {
       const job = mockJobs[2]; // Warehouse Worker with null location
       const jobResponse = {
+        id: job.id,
         jobName: job.name,
         jobDescription: job.description,
         jobLocation: job.location || '',
@@ -120,6 +123,7 @@ describe('Job Routes - Route Handler Logic', () => {
       };
 
       const jobResponse = {
+        id: jobWithoutActive.id,
         jobName: jobWithoutActive.name,
         jobDescription: jobWithoutActive.description,
         jobLocation: jobWithoutActive.location || '',
@@ -132,6 +136,7 @@ describe('Job Routes - Route Handler Logic', () => {
     it('should handle jobs with false is_active', () => {
       const job = mockJobs[2]; // Warehouse Worker with is_active: false
       const jobResponse = {
+        id: job.id,
         jobName: job.name,
         jobDescription: job.description,
         jobLocation: job.location || '',

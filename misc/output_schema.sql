@@ -87,6 +87,43 @@ CREATE TYPE public.screening_decision_enum AS ENUM (
 ALTER TYPE public.screening_decision_enum OWNER TO "michael.angelo.diaz";
 
 --
+-- Name: job_requirement_type_enum; Type: TYPE; Schema: public; Owner: michael.angelo.diaz
+--
+
+CREATE TYPE public.job_requirement_type_enum AS ENUM (
+    'CDL_CLASS',
+    'YEARS_EXPERIENCE',
+    'DRIVING_RECORD',
+    'ENDORSEMENTS',
+    'AGE_REQUIREMENT',
+    'PHYSICAL_EXAM',
+    'DRUG_TEST',
+    'BACKGROUND_CHECK',
+    'GEOGRAPHIC_RESTRICTION'
+);
+
+
+ALTER TYPE public.job_requirement_type_enum OWNER TO "michael.angelo.diaz";
+
+--
+-- Name: job_fact_type_enum; Type: TYPE; Schema: public; Owner: michael.angelo.diaz
+--
+
+CREATE TYPE public.job_fact_type_enum AS ENUM (
+    'ROUTE_TYPE',
+    'EQUIPMENT',
+    'BENEFITS',
+    'SCHEDULE',
+    'COMPANY_SIZE',
+    'SAFETY_RATING',
+    'MILES_PER_WEEK',
+    'LOAD_TYPE'
+);
+
+
+ALTER TYPE public.job_fact_type_enum OWNER TO "michael.angelo.diaz";
+
+--
 -- Name: are_all_requirements_completed(uuid); Type: FUNCTION; Schema: public; Owner: michael.angelo.diaz
 --
 
@@ -149,7 +186,7 @@ COMMENT ON FUNCTION public.get_conversation_messages(p_conversation_id uuid) IS 
 -- Name: get_conversation_requirements(uuid); Type: FUNCTION; Schema: public; Owner: michael.angelo.diaz
 --
 
-CREATE FUNCTION public.get_conversation_requirements(p_conversation_id uuid) RETURNS TABLE(conversation_job_requirement_id uuid, job_requirement_id uuid, requirement_type character varying, requirement_description text, criteria jsonb, priority integer, status public.requirement_status_enum, extracted_value jsonb, evaluated_at timestamp with time zone, message_id uuid)
+CREATE FUNCTION public.get_conversation_requirements(p_conversation_id uuid) RETURNS TABLE(conversation_job_requirement_id uuid, job_requirement_id uuid, requirement_type public.job_requirement_type_enum, requirement_description text, criteria jsonb, priority integer, status public.requirement_status_enum, extracted_value jsonb, evaluated_at timestamp with time zone, message_id uuid)
     LANGUAGE sql STABLE
     AS $$
     SELECT 
@@ -183,7 +220,7 @@ COMMENT ON FUNCTION public.get_conversation_requirements(p_conversation_id uuid)
 -- Name: get_next_pending_requirement(uuid); Type: FUNCTION; Schema: public; Owner: michael.angelo.diaz
 --
 
-CREATE FUNCTION public.get_next_pending_requirement(p_conversation_id uuid) RETURNS TABLE(conversation_job_requirement_id uuid, job_requirement_id uuid, requirement_type character varying, requirement_description text, criteria jsonb, priority integer)
+CREATE FUNCTION public.get_next_pending_requirement(p_conversation_id uuid) RETURNS TABLE(conversation_job_requirement_id uuid, job_requirement_id uuid, requirement_type public.job_requirement_type_enum, requirement_description text, criteria jsonb, priority integer)
     LANGUAGE sql STABLE
     AS $$
     SELECT 
@@ -289,7 +326,7 @@ ALTER TABLE public.conversations OWNER TO "michael.angelo.diaz";
 CREATE TABLE public.job_facts (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     job_id uuid NOT NULL,
-    fact_type character varying(50) NOT NULL,
+    fact_type public.job_fact_type_enum NOT NULL,
     content text NOT NULL,
     created_at timestamp with time zone DEFAULT now()
 );
@@ -304,7 +341,7 @@ ALTER TABLE public.job_facts OWNER TO "michael.angelo.diaz";
 CREATE TABLE public.job_requirements (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     job_id uuid NOT NULL,
-    requirement_type character varying(50) NOT NULL,
+    requirement_type public.job_requirement_type_enum NOT NULL,
     requirement_description text NOT NULL,
     criteria jsonb NOT NULL,
     priority integer NOT NULL,
