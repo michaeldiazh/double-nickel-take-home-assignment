@@ -4,7 +4,7 @@
  */
 
 import { LLMClient } from '../client';
-import { ChatMessage, LLMResponse, StreamOptions } from '../client/types';
+import { ChatMessage, LLMResponse, StreamOptions } from '../client';
 import { ConversationContext } from './prompts';
 
 /**
@@ -14,7 +14,7 @@ export interface ProcessorRequest {
   /**
    * The user's message content
    */
-  userMessage: string;
+  userMessage?: string;
   
   /**
    * The conversation context (history, requirements, current requirement)

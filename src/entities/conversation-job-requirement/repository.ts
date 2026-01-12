@@ -24,12 +24,13 @@ export class ConversationJobRequirementRepository {
     conversationId: string,
     jobId: string
   ): Promise<void> {
-    // Get job requirement IDs ordered by priority
+    // Get top 3 job requirement IDs ordered by priority
     const jobReqQuery = `
       SELECT id
       FROM job_requirements
       WHERE job_id = $1
       ORDER BY priority ASC, created_at ASC
+      LIMIT 3
     `;
     
     const jobReqs = await this.client.query<{ id: string }>(jobReqQuery, [jobId]);
@@ -82,7 +83,7 @@ export class ConversationJobRequirementRepository {
       conversationId,
       result.rows[0].job_requirement_id,
     ]);
-    
+
     if (fullResult.rows.length === 0) return null;
     
     return fullResult.rows[0];

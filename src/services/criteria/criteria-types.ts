@@ -148,6 +148,7 @@ export type JobRequirementCriteria =
 export const cdlClassValueSchema = z.object({
   cdl_class: z.enum([CDLClass.A, CDLClass.B, CDLClass.C]),
   confirmed: z.boolean(),
+  needs_clarification: z.boolean().optional(),
 });
 
 export type CDLClassValue = z.infer<typeof cdlClassValueSchema>;
@@ -160,6 +161,7 @@ export const yearsExperienceValueSchema = z.object({
   years_experience: z.number().int().min(0),
   meets_requirement: z.boolean(),
   exceeds_requirement: z.boolean().optional(),
+  needs_clarification: z.boolean().optional(),
 });
 
 export type YearsExperienceValue = z.infer<typeof yearsExperienceValueSchema>;
@@ -172,6 +174,7 @@ export const drivingRecordValueSchema = z.object({
   violations: z.number().int().min(0),
   accidents: z.number().int().min(0),
   clean_record: z.boolean(),
+  needs_clarification: z.boolean().optional(),
 });
 
 export type DrivingRecordValue = z.infer<typeof drivingRecordValueSchema>;
@@ -185,6 +188,7 @@ export const endorsementsValueSchema = z.object({
   tanker: z.boolean().optional(),
   doubles_triples: z.boolean().optional(),
   endorsements_confirmed: z.boolean(),
+  needs_clarification: z.boolean().optional(),
 });
 
 export type EndorsementsValue = z.infer<typeof endorsementsValueSchema>;
@@ -196,6 +200,7 @@ export type EndorsementsValue = z.infer<typeof endorsementsValueSchema>;
 export const ageRequirementValueSchema = z.object({
   age: z.number().int().min(18),
   meets_requirement: z.boolean(),
+  needs_clarification: z.boolean().optional(),
 });
 
 export type AgeRequirementValue = z.infer<typeof ageRequirementValueSchema>;
@@ -207,6 +212,7 @@ export type AgeRequirementValue = z.infer<typeof ageRequirementValueSchema>;
 export const physicalExamValueSchema = z.object({
   has_current_dot_physical: z.boolean(),
   confirmed: z.boolean(),
+  needs_clarification: z.boolean().optional(),
 });
 
 export type PhysicalExamValue = z.infer<typeof physicalExamValueSchema>;
@@ -219,6 +225,7 @@ export const drugTestValueSchema = z.object({
   agrees_to_pre_employment: z.boolean(),
   agrees_to_random_testing: z.boolean().optional(),
   confirmed: z.boolean(),
+  needs_clarification: z.boolean().optional(),
 });
 
 export type DrugTestValue = z.infer<typeof drugTestValueSchema>;
@@ -243,6 +250,7 @@ export type BackgroundCheckCriteria = z.infer<typeof backgroundCheckCriteriaSche
 export const backgroundCheckValueSchema = z.object({
   agrees_to_background_check: z.boolean(),
   confirmed: z.boolean(),
+  needs_clarification: z.boolean().optional(),
 });
 
 export type BackgroundCheckValue = z.infer<typeof backgroundCheckValueSchema>;
@@ -266,6 +274,7 @@ export const geographicRestrictionValueSchema = z.object({
   location: z.string(), // State code or city
   state: z.string().length(2).optional(), // State code (e.g., "NY")
   meets_requirement: z.boolean(),
+  needs_clarification: z.boolean().optional(),
 });
 
 export type GeographicRestrictionValue = z.infer<typeof geographicRestrictionValueSchema>;

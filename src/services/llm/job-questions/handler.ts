@@ -6,7 +6,7 @@ import { createProcessor, Processor } from '../processor';
 import { ConversationContextService } from '../../conversation-context/service';
 import { ConversationContext } from '../processor/prompts/prompt-context';
 import { ConversationStatus } from '../../../entities/conversation/domain';
-import { extractJSONObject } from '../../criteria/parser/utils';
+import { extractJSONObject, removeJSONFromText } from '../../criteria/parser/utils';
 
 /**
  * Job Questions Handler - processes user questions during ON_JOB_QUESTIONS status.
@@ -46,53 +46,71 @@ export class JobQuestionsHandler {
     assistantMessage: string;
     newStatus: ConversationStatus;
   }> {
-    // 1. Save user message
-    await this.saveUserMessage(conversationId, userMessage);
+    try {
+      // 1. Save user message
+      await this.saveUserMessage(conversationId, userMessage);
 
-    // 2. Load conversation context and validate status
-    const context = await this.loadAndValidateContext(conversationId);
+      // 2. Load conversation context and validate status
+      const context = await this.loadAndValidateContext(conversationId);
 
-    // 3. Process user question through LLM with job facts (get raw response with JSON)
-    const processorResponse = await this.processor({
-      userMessage,
-      context,
-      isInitialMessage: false,
-      streamOptions,
-    });
-
-    const rawAssistantMessage = processorResponse.assistantMessage;
-
-    // 4. Parse JSON response from LLM
-    const parseResult = this.parseJobQuestionResponse(rawAssistantMessage);
-    
-    // Extract message from JSON if available, otherwise use raw message
-    // This is the clean message we'll send to the user (without JSON)
-    const assistantMessage = parseResult.message || rawAssistantMessage;
-    
-    // 5. Save the clean message (without JSON) to the database
-    await this.saveAssistantMessage(conversationId, assistantMessage);
-    
-    // Check if user wants to continue or is done
-    const continueWithQuestion = parseResult.continueWithQuestion ?? true; // Default to true if parsing failed
-
-    // 5. Handle status transitions
-    if (!continueWithQuestion) {
-      // User is done - transition to DONE status
-      await this.conversationRepo.update(conversationId, {
-        conversation_status: ConversationStatus.DONE,
+      // 3. Process user question through LLM with job facts (get raw response with JSON)
+      // NOTE: We don't stream here - we'll get the full response, clean it, then stream the clean version
+      const processorResponse = await this.processor({
+        userMessage,
+        context,
+        isInitialMessage: false,
+        // Don't pass streamOptions - we'll stream the cleaned message manually
       });
+
+      const rawAssistantMessage = processorResponse.assistantMessage;
+
+      // 4. Parse JSON response from LLM
+      const parseResult = this.parseJobQuestionResponse(rawAssistantMessage);
       
+      // Extract message from JSON if available, otherwise use raw message
+      // Clean the message to remove any JSON that might be included
+      let assistantMessage = parseResult.message || rawAssistantMessage;
+      
+      // Clean JSON from the message (in case JSON parsing failed but JSON is still in the message)
+      assistantMessage = removeJSONFromText(assistantMessage);
+      
+      // If we have streamOptions, stream the cleaned message
+      if (streamOptions && assistantMessage) {
+        // Stream the clean message character by character
+        for (const char of assistantMessage) {
+          streamOptions.onChunk(char);
+        }
+        streamOptions.onComplete?.();
+      }
+      
+      // 5. Save the clean message (without JSON) to the database
+      await this.saveAssistantMessage(conversationId, assistantMessage);
+      
+      // Check if user wants to continue or is done
+      const continueWithQuestion = parseResult.continueWithQuestion ?? true; // Default to true if parsing failed
+
+      // 6. Handle status transitions
+      if (!continueWithQuestion) {
+        // User is done - transition to DONE status
+        await this.conversationRepo.update(conversationId, {
+          conversation_status: ConversationStatus.DONE,
+        });
+        
+        return {
+          assistantMessage,
+          newStatus: ConversationStatus.DONE,
+        };
+      }
+
+      // User wants to continue - stay in ON_JOB_QUESTIONS
       return {
         assistantMessage,
-        newStatus: ConversationStatus.DONE,
+        newStatus: ConversationStatus.ON_JOB_QUESTIONS,
       };
+    } catch (error) {
+      console.error(`Error in handleJobQuestion for conversation ${conversationId}:`, error);
+      throw error;
     }
-
-    // User wants to continue - stay in ON_JOB_QUESTIONS
-    return {
-      assistantMessage,
-      newStatus: ConversationStatus.ON_JOB_QUESTIONS,
-    };
   }
 
   /**

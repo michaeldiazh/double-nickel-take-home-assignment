@@ -78,7 +78,12 @@ export const buildPreviouslyCollectedValueSection = (
 export const buildSystemContextMessage = (
     context: ConversationContext
 ): string => {
-    const {conversation_requirements, current_requirement, message_history} = context;
+    const {conversation_requirements, current_requirement} = context;
+    
+    // NOTE: We do NOT include conversation history here because it's already
+    // included in context.message_history as ChatMessage objects, which is the
+    // proper way to send conversation history to the LLM.
+    // Including it here would duplicate the history and confuse the LLM.
     
     let requirementDetails = '';
     if (current_requirement) {
@@ -95,7 +100,6 @@ export const buildSystemContextMessage = (
     
     return `
     ${buildHeading()}
-    ${buildConversationHistory(message_history)}
     ${buildRequirementsOverviewSection(conversation_requirements)}
     ${requirementDetails}
   `;

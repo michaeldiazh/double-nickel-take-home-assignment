@@ -11,7 +11,15 @@ import { RequirementHandler } from '../services/llm/requirement/handler';
 import { JobQuestionsHandler } from '../services/llm/job-questions/handler';
 import { CompletionHandler } from '../services/llm/completion/handler';
 import { ConversationRepository } from '../entities/conversation/repository';
+import { ConversationJobRequirementRepository } from '../entities/conversation-job-requirement/repository';
 import { ConversationStatus } from '../entities/conversation/domain';
+import {
+  handleInitialConversation,
+  handlePendingResponse,
+  handleRequirementsResponse,
+  handleJobQuestionsResponse,
+  handleDoneConversation,
+} from '../services/sender/handler';
 
 /**
  * WebSocket message types
@@ -57,6 +65,7 @@ export class ChatWebSocketServer {
   private jobQuestionsHandler: JobQuestionsHandler;
   private completionHandler: CompletionHandler;
   private conversationRepo: ConversationRepository;
+  private conversationJobRequirementRepo: ConversationJobRequirementRepository;
 
   constructor(port: number = 3000) {
     // Initialize Express app
@@ -83,6 +92,7 @@ export class ChatWebSocketServer {
     this.jobQuestionsHandler = new JobQuestionsHandler(pool, llmClient);
     this.completionHandler = new CompletionHandler(pool, llmClient);
     this.conversationRepo = new ConversationRepository(pool);
+    this.conversationJobRequirementRepo = new ConversationJobRequirementRepository(pool);
 
     // Setup WebSocket connection handling
     this.wss.on('connection', (ws: WebSocket) => {
@@ -104,7 +114,28 @@ export class ChatWebSocketServer {
 
     ws.on('message', async (data: Buffer) => {
       try {
-        const message: ClientMessage = JSON.parse(data.toString());
+        const rawMessage = data.toString();
+        if (!rawMessage || rawMessage.trim().length === 0) {
+          console.warn('Received empty message');
+          return;
+        }
+
+        const parsed = JSON.parse(rawMessage);
+        
+        // Check if this is a server message (has 'event' field) - ignore it
+        if ('event' in parsed && !('type' in parsed)) {
+          // This is a server message being echoed back, ignore it
+          return;
+        }
+
+        // Validate it has a type field
+        if (!parsed || typeof parsed !== 'object' || !('type' in parsed)) {
+          console.warn('Received message without type field:', parsed);
+          this.sendError(ws, 'Message must have a type field');
+          return;
+        }
+
+        const message: ClientMessage = parsed as ClientMessage;
         await this.handleMessage(ws, message);
       } catch (error) {
         console.error('Error handling message:', error);
@@ -136,7 +167,9 @@ export class ChatWebSocketServer {
         await this.handleEndConversation(ws, message.conversationId);
         break;
       default:
-        this.sendError(ws, `Unknown message type: ${(message as any).type}`);
+        const messageType = (message as any).type ?? 'undefined';
+        console.warn(`Unknown message type: ${messageType}`, message);
+        this.sendError(ws, `Unknown message type: ${messageType}`);
     }
   }
 
@@ -145,36 +178,16 @@ export class ChatWebSocketServer {
    */
   private async handleStartConversation(ws: WebSocket, userId: string, jobId: string): Promise<void> {
     try {
-      // 1. Create application and conversation (status PENDING)
-      const { applicationId, conversationId } = await this.applicationService.createApplication({
-        user_id: userId,
-        job_id: jobId,
+      const result = await handleInitialConversation(ws, userId, jobId, {
+        applicationService: this.applicationService,
+        greetingInitialHandler: this.greetingInitialHandler,
       });
 
-      // 2. Send initial greeting if status is PENDING
-      const streamOptions = {
-        onChunk: (chunk: string) => {
-          this.sendMessage(ws, {
-            type: 'greeting',
-            conversationId,
-            message: chunk,
-          });
-        },
-        onComplete: () => {
-          // Optional: send completion signal
-        },
-        onError: (error: Error) => {
-          this.sendError(ws, error.message);
-        },
-      };
-
-      const greeting = await this.greetingInitialHandler.sendInitialGreeting(conversationId, streamOptions);
-
-      // Send status update after streaming completes (message content already sent via chunks)
+      // Send status update after greeting completes
       this.sendMessage(ws, {
         type: 'status_update',
-        conversationId,
-        status: ConversationStatus.PENDING,
+        conversationId: result.conversationId,
+        status: result.newStatus,
       });
     } catch (error) {
       console.error('Error in handleStartConversation:', error);
@@ -212,30 +225,68 @@ export class ChatWebSocketServer {
       };
 
       // Route to appropriate handler based on conversation status
+      let result;
       switch (conversation.conversation_status) {
         case ConversationStatus.PENDING:
           // User responding to initial greeting (yes/no)
-          await this.handleStartStatus(ws, conversationId, userMessage, streamOptions);
+          result = await handlePendingResponse(ws, conversationId, userMessage, {
+            greetingResponseHandler: this.greetingResponseHandler,
+            conversationRepo: this.conversationRepo,
+          });
           break;
         case ConversationStatus.START:
-          // START status is set briefly after user accepts, then moves to ON_REQ
-          // Route to requirement handler
-          await this.handleOnReqStatus(ws, conversationId, userMessage, streamOptions);
+          // START is a transient state - route to requirements handler
+          // (shouldn't happen if GreetingResponseHandler sets ON_REQ, but handle it just in case)
+          result = await handleRequirementsResponse(ws, conversationId, userMessage, {
+            requirementHandler: this.requirementHandler,
+            conversationRepo: this.conversationRepo,
+            conversationJobRequirementRepo: this.conversationJobRequirementRepo,
+          });
           break;
         case ConversationStatus.ON_REQ:
           // Handle requirement question response
-          await this.handleOnReqStatus(ws, conversationId, userMessage, streamOptions);
+          result = await handleRequirementsResponse(ws, conversationId, userMessage, {
+            requirementHandler: this.requirementHandler,
+            conversationRepo: this.conversationRepo,
+            conversationJobRequirementRepo: this.conversationJobRequirementRepo,
+          });
           break;
         case ConversationStatus.ON_JOB_QUESTIONS:
           // Handle job question
-          await this.handleOnJobQuestionsStatus(ws, conversationId, userMessage, streamOptions);
+          result = await handleJobQuestionsResponse(ws, conversationId, userMessage, {
+            jobQuestionsHandler: this.jobQuestionsHandler,
+            completionHandler: this.completionHandler,
+            conversationRepo: this.conversationRepo,
+          });
           break;
         case ConversationStatus.DONE:
-          // Conversation is done - send completion message if needed
-          await this.handleDoneStatus(ws, conversationId, streamOptions);
+          // Conversation is done - send completion message
+          result = await handleDoneConversation(ws, conversationId, {
+            completionHandler: this.completionHandler,
+          });
           break;
         default:
           this.sendError(ws, `Unknown conversation status: ${conversation.conversation_status}`);
+          return;
+      }
+
+      // Send status update if status changed
+      if (result) {
+        this.sendMessage(ws, {
+          type: 'status_update',
+          conversationId,
+          status: result.newStatus,
+        });
+
+        // Send conversation end if status is DONE
+        if (result.newStatus === ConversationStatus.DONE) {
+          this.sendMessage(ws, {
+            type: 'conversation_end',
+            conversationId,
+            message: result.message,
+            status: ConversationStatus.DONE,
+          });
+        }
       }
     } catch (error) {
       console.error('Error in handleSendMessage:', error);
@@ -244,67 +295,6 @@ export class ChatWebSocketServer {
   }
 
 
-  /**
-   * Handle PENDING/START status - user responded to greeting (yes/no)
-   * GreetingResponseHandler handles both PENDING and START statuses
-   */
-  private async handleStartStatus(ws: WebSocket, conversationId: string, userMessage: string, streamOptions: any): Promise<void> {
-    const result = await this.greetingResponseHandler.handleResponse(conversationId, userMessage, streamOptions);
-    
-    // result.status is 'DENIED' or 'START'
-    // If DENIED, conversation status is DONE
-    // If START, we move to ON_REQ (requirement handler sets this)
-    const newStatus = result.status === 'DENIED' ? ConversationStatus.DONE : ConversationStatus.ON_REQ;
-    
-    // Send status update after streaming completes (message content already sent via chunks)
-    this.sendMessage(ws, {
-      type: 'status_update',
-      conversationId,
-      status: newStatus,
-    });
-  }
-
-  /**
-   * Handle ON_REQ status - handle requirement question response
-   */
-  private async handleOnReqStatus(ws: WebSocket, conversationId: string, userMessage: string, streamOptions: any): Promise<void> {
-    const result = await this.requirementHandler.handleRequirementResponse(conversationId, userMessage, streamOptions);
-    
-    // Send status update after streaming completes (message content already sent via chunks)
-    this.sendMessage(ws, {
-      type: 'status_update',
-      conversationId,
-      status: result.newStatus,
-    });
-  }
-
-  /**
-   * Handle ON_JOB_QUESTIONS status - handle job question
-   */
-  private async handleOnJobQuestionsStatus(ws: WebSocket, conversationId: string, userMessage: string, streamOptions: any): Promise<void> {
-    const result = await this.jobQuestionsHandler.handleJobQuestion(conversationId, userMessage, streamOptions);
-    
-    // Send status update after streaming completes (message content already sent via chunks)
-    this.sendMessage(ws, {
-      type: 'status_update',
-      conversationId,
-      status: result.newStatus,
-    });
-  }
-
-  /**
-   * Handle DONE status - send completion message
-   */
-  private async handleDoneStatus(ws: WebSocket, conversationId: string, streamOptions: any): Promise<void> {
-    const completionMessage = await this.completionHandler.sendCompletionMessage(conversationId, streamOptions);
-    
-    this.sendMessage(ws, {
-      type: 'conversation_end',
-      conversationId,
-      message: completionMessage,
-      status: ConversationStatus.DONE,
-    });
-  }
 
   /**
    * Handle end conversation

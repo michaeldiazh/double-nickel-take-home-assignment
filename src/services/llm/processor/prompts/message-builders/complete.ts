@@ -6,12 +6,16 @@ const buildCompleteHeader = (firstName: string, jobTitle: string): string => `
 
 const buildSummaryInstruction = (): string => `
     Here's the summary instruction:
+    - First, clearly state whether the candidate PASSED or FAILED the qualification bar based on whether all requirements were met.
     - Summarize the candidate's qualifications based on the requirements discussed during the interview.
-        Summarize the candidate's qualifications based on the job facts discussed during the interview. 
-        In a table format with the job facts as the headers and the candidate's qualifications as the values.
-    - Highlight key strengths and any areas that may need improvement.
+    - Include a brief summary of the conversation, highlighting:
+        * Which requirements were met (and the candidate's responses)
+        * Any requirements that were not met (if applicable)
+        * Key strengths and qualifications
+        * Any areas that may need improvement (if applicable)
     - Maintain a professional and appreciative tone throughout the summary.
     - Thank the candidate for their time and interest in the position.
+    - Format the summary clearly with sections for: Pass/Fail Status, Qualifications Summary, and Next Steps.
 `
 
 const userDidNotMeetAllRequirementDetail = (context: ConversationContext, requirements: any[]): string => {

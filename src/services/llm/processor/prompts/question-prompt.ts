@@ -48,10 +48,8 @@ const buildRequirementSystemMessagePrompt = (
         throw new Error('current_requirement is required for requirement prompts');
     }
     const nextRequirementMessage = buildRequirementSystemMessage(job_title, current_requirement);
-    const contextString = buildSystemContextMessage(context);
-    const nextRequirementPrompt = buildSystemMessage(nextRequirementMessage);
-    const contextPrompt = buildSystemMessage(contextString);
-    return [...context.message_history, contextPrompt, nextRequirementPrompt];
+    const systemPrompt = buildSystemMessage(nextRequirementMessage);
+    return [systemPrompt];
 }
 
 const buildFollowUpRequirementPrompt = (
@@ -63,35 +61,42 @@ const buildFollowUpRequirementPrompt = (
     const requirementType = context.current_requirement.requirement_type;
     const clarificationNeeded = context.clarification_needed!;
     const {job_title} = context
+    // Combine context and follow-up message into one system message
     const contextString = buildSystemContextMessage(context);
     const followUpMessage = buildRequirementFollowUpSystemPromptMessage(job_title, clarificationNeeded, requirementType);
-    const followUpPrompt = buildSystemMessage(followUpMessage);
-    const contextPrompt = buildSystemMessage(contextString);
-    return [...context.message_history, contextPrompt, followUpPrompt];
+    const combinedSystemMessage = `${followUpMessage}`;
+    const systemPrompt = buildSystemMessage(combinedSystemMessage);
+    // Don't include message_history - context summary is sufficient
+    return [systemPrompt];
 }
 
 
 const buildJobFactsSystemMessage = (
     context: ConversationContext
 ): ChatMessage[] => {
+    // Combine context and job facts message into one system message
     const contextString = buildSystemContextMessage(context);
     const jobFactsMessage = buildJobFactsSystemPromptMessage(context);
-    const jobFactsPrompt = buildSystemMessage(jobFactsMessage);
-    const contextPrompt = buildSystemMessage(contextString);
-    return [...context.message_history, contextPrompt, jobFactsPrompt];
+    const combinedSystemMessage = `${jobFactsMessage}`;
+    const systemPrompt = buildSystemMessage(combinedSystemMessage);
+    // Don't include message_history - context summary is sufficient
+    return [systemPrompt];
 };
 
 const buildCompleteSystemPrompt = (
     context: ConversationContext
 ): ChatMessage[] => {
+    // Combine context and completion message into one system message
     const contextString = buildSystemContextMessage(context);
     const finalPromptMessage = buildCompletionSystemPromptMessage(context);
-    const finalPrompt = buildSystemMessage(finalPromptMessage);
-    const contextPrompt = buildSystemMessage(contextString);
-    return [...context.message_history, contextPrompt, finalPrompt];
+    const combinedSystemMessage = `${contextString}\n\n${finalPromptMessage}`;
+    const systemPrompt = buildSystemMessage(combinedSystemMessage);
+    // Don't include message_history - context summary is sufficient
+    return [systemPrompt];
 }
 
 const promptBuilders: Record<ConversationContext['status'], PromptFunction> = {
+    'PENDING': buildInitialPrompt,
     'START': buildRequirementSystemMessagePrompt,  // START means user accepted, we're asking requirements
     'ON_REQ': buildRequirementSystemMessagePrompt,
     'NEED_FOLLOW_UP': buildFollowUpRequirementPrompt,

@@ -90,6 +90,7 @@ export class ConversationContextService {
     
     // For ON_JOB_QUESTIONS and DONE, current_requirement is undefined
     const context: ConversationContext = {
+        conversation_id: conversationId,
       user_first_name: repoContext.user_first_name,
       job_title: repoContext.job_title,
       job_facts: jobFacts,

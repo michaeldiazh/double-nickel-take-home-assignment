@@ -205,9 +205,9 @@ export class GreetingResponseHandler {
     // Save assistant message
     await this.saveAssistantMessage(conversationId, assistantMessage);
 
-    // Update conversation - user accepted, requirements created
+    // Update conversation - user accepted, requirements created, move directly to ON_REQ
     await this.conversationRepo.update(conversationId, {
-      conversation_status: ConversationStatus.START,
+      conversation_status: ConversationStatus.ON_REQ,
     });
 
     return {

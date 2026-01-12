@@ -15,7 +15,7 @@ import PhysicalExamParserContext from './physical-exam/';
 import DrugTestParserContext from './drug-test/';
 import BackgroundCheckParserContext from './background-check/';
 import GeographicRestrictionParserContext from './geographic-restriction/';
-import {buildFailureParseResult, buildSuccessParseResult, extractValueFromPayload, extractAssessmentAndConfidence} from "./utils";
+import {buildFailureParseResult, buildSuccessParseResult, extractValueFromPayload, extractAssessmentAndConfidence, removeJSONFromText} from "./utils";
 
 /**
  * Map of requirement types to their parser contexts.
@@ -44,20 +44,46 @@ const extractValue = <T extends ConversationRequirementValue>(content: string, p
     // Extract assessment, confidence, and message from content (may be in JSON or text)
     const {assessment, confidence, message} = extractAssessmentAndConfidence(content);
     
+    // Clean the message to remove any embedded JSON (parser's responsibility)
+    const cleanedMessage = message ? removeJSONFromText(message) : null;
+    
     // Always try to extract from JSON payload first (more structured and validated)
     const jsonResult = extractValueFromPayload(content, valueSchema);
     if (jsonResult) {
-        return buildSuccessParseResult(jsonResult, assessment, confidence, message);
+        if(jsonResult.needs_clarification) {
+            return {
+                success: false,
+                value: null as never,
+                error: parserContext.notParsableErrorMessage,
+                needsClarification: true,
+                assessment: assessment ?? null,
+                confidence: confidence ?? null,
+                message: cleanedMessage || null,
+            };
+        } 
+        return buildSuccessParseResult(jsonResult, assessment, confidence, cleanedMessage);
     }
     
     // Try to extract from natural language text as fallback
     const textResult = parserContext.extractValueFromText(content);
     if (textResult) {
-        return buildSuccessParseResult(textResult, assessment, confidence, message);
+        // If no message was extracted from JSON, use cleaned raw content as fallback
+        const fallbackMessage = cleanedMessage || removeJSONFromText(content);
+        return buildSuccessParseResult(textResult, assessment, confidence, fallbackMessage);
     }
 
-    // Both methods failed
-    return buildFailureParseResult(parserContext.notParsableErrorMessage);
+    // Both methods failed - but we should still try to return a cleaned message
+    // The parser should always attempt to clean the content, even if parsing fails
+    const fallbackCleanedMessage = removeJSONFromText(content);
+    return {
+        success: false,
+        value: null as never,
+        error: parserContext.notParsableErrorMessage,
+        needsClarification: true,
+        assessment: assessment ?? null,
+        confidence: confidence ?? null,
+        message: fallbackCleanedMessage || null, // Always return cleaned message, even on failure
+    };
 };
 
 /**
@@ -73,6 +99,8 @@ export const parseLLMResponse = <T extends ConversationRequirementValue>(
 ): ParseResult<T> => {
     const parserContext = parserContextMap[requirementType];
     if (!parserContext) {
+        // Even for unsupported types, try to clean the content
+        const cleanedMessage = removeJSONFromText(content);
         return {
             success: false,
             value: null,
@@ -80,6 +108,7 @@ export const parseLLMResponse = <T extends ConversationRequirementValue>(
             needsClarification: true,
             assessment: null,
             confidence: null,
+            message: cleanedMessage || null,
         };
     }
 

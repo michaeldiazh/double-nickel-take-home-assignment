@@ -306,18 +306,27 @@ pip install websockets
 
 ### Usage
 
+The client requires `--user-id` and `--job-id` arguments:
+
 ```bash
-# Run with default settings (localhost:3000, test UUIDs)
-python websocket_client.py
-
-# Run with custom host and port
-python websocket_client.py --host localhost --port 3000
-
-# Run with custom user and job IDs
+# Run with required user and job IDs
 python websocket_client.py \
   --user-id 11111111-1111-4111-8111-111111111111 \
   --job-id aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa
+
+# Run with custom server URI
+python websocket_client.py \
+  --uri ws://localhost:3000 \
+  --user-id 11111111-1111-4111-8111-111111111111 \
+  --job-id aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa
 ```
+
+### Commands
+
+- `/quit` or `/exit` - Exit the client
+- `/end` - End the conversation
+- `/help` - Show help message
+- Any other text - Send as a message
 
 ### Features
 
@@ -325,34 +334,40 @@ python websocket_client.py \
 - **Interactive chat**: Type messages and receive responses
 - **Status tracking**: Shows conversation status updates
 - **Error handling**: Displays errors clearly
-- **Special commands**: Type `exit`, `quit`, or `q` to end the conversation
+- **Command support**: Special commands for controlling the client
 
 ### Example Session
 
 ```
-$ python websocket_client.py
-✓ Connected to ws://localhost:3000
+$ python websocket_client.py --user-id abc123 --job-id job456
 
-→ Starting conversation...
-  User ID: 11111111-1111-4111-8111-111111111111
-  Job ID: aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa
+============================================================
+Double Nickel Chat Client
+============================================================
+
+Commands:
+  /quit or /exit - Exit the client
+  /end - End the conversation
+  /help - Show this help message
+  Any other text - Send as a message
+
+============================================================
 
 → Assistant: Hello John! 🚚 Welcome and thank you for applying...
 
 [Status: PENDING]
 
-You: Yes, I'd like to continue
+📤 You: Yes, I'd like to continue
 → Assistant: Great! Do you have a valid Class A CDL?
 
 [Status: ON_REQ]
 
-You: Yes, I have my Class A CDL
+📤 You: Yes, I have my Class A CDL
 → Assistant: Excellent! How many years of truck driving experience...
 
 [Status: ON_REQ]
 
-You: exit
-→ Ending conversation...
+👋 Goodbye!
 ✓ Disconnected from server
 ```
 

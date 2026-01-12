@@ -263,7 +263,7 @@ export const createOpenAIClient = (config: OpenAIClientConfig): LLMClient => {
       // Convert and build request
       const openAIMessages = messages.map((msg) => toOpenAIMessage(msg));
       const request = buildNonStreamingRequest(model, openAIMessages);
-      
+      console.log(`[OpenAIClient] Request: ${JSON.stringify(request)}`);
       // Make API call
       const response = await client.chat.completions.create(request);
       
@@ -328,7 +328,7 @@ export const createOpenAIClient = (config: OpenAIClientConfig): LLMClient => {
       // Convert and build request
       const openAIMessages = messages.map((msg) => toOpenAIMessage(msg));
       const request = buildStreamingRequest(model, openAIMessages);
-      
+      console.log(`[OpenAIClient] Request: ${JSON.stringify(request)}`);
       // Create stream
       const stream = await client.chat.completions.create(request);
       

@@ -5,6 +5,12 @@
 import {ChatMessage, LLMResponse, MessageRole, StreamOptions} from '../client';
 import {ProcessorConfig, ProcessorRequest, ProcessorResponse} from './types';
 import {buildConversationPrompt, ConversationContext} from './prompts';
+import { JobRequirement } from '../../../entities/job-requirement';
+import { buildAnswerCriteriaSystemPrompt } from './prompts/message-builders/requirements';
+import { buildSystemMessage } from './prompts/message-builders/message';
+
+export const buildAnswerCriteriaSystemMessage = (userMessage: string, requirement: JobRequirement): ChatMessage[] => 
+    [buildSystemMessage(buildAnswerCriteriaSystemPrompt(userMessage, requirement))];
 
 /**
  * Builds the complete message list to send to the LLM.
@@ -15,11 +21,12 @@ import {buildConversationPrompt, ConversationContext} from './prompts';
  * @returns Array of ChatMessage objects ready for the LLM
  */
 const buildMessagesForLLM = (
-    userMessage: string,
     context: ConversationContext,
+    userMessage?: string,
 ): ChatMessage[] => {
     const conversationMessages = buildConversationPrompt(context);
-    return [...conversationMessages, {role: MessageRole.USER, content: userMessage,}];
+    if (userMessage) return [...conversationMessages, {role: MessageRole.USER, content: userMessage,}];
+    return conversationMessages;
 };
 
 
@@ -72,8 +79,10 @@ export const createProcessor = (config: ProcessorConfig) => {
     }
 
     return async (request: ProcessorRequest): Promise<ProcessorResponse> => {
-        const {userMessage, context, isInitialMessage = false, streamOptions} = request;
-        const messages = buildMessagesForLLM(userMessage, context);
+        const {context, userMessage, streamOptions} = request;
+        const messages = buildMessagesForLLM(context, userMessage);
+        console.log(`number of messages we are sending to the LLM: ${messages.length}`);
+        messages.forEach(message => console.log(`[Processor]: Sending the following message to the LLM: ${message.role}: ${message.content}`));
         if (streamOptions) return handleStream(messages, streamOptions);
         return handleNonStream(messages);
     }

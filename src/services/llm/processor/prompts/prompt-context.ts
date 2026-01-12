@@ -1,8 +1,7 @@
 import { ConversationContext } from '../../../conversation-context';
 import {
     ConversationJobRequirement,
-    JobRequirement,
-    RequirementStatus
+    JobRequirement
 } from '../../../../entities';
 
 // Re-export for backwards compatibility

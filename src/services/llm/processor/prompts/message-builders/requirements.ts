@@ -5,6 +5,26 @@ const buildFirstRequirementHeaderLine = (jobName: string): string => `
    Okay, chat! Here the a requirement for ${jobName}.:
 `;
 
+const buildAnswerCriteriaHeaderLine = (requirement: JobRequirement): string => `
+    Okay, chat! We are evaluating the following criteria: ${JSON.stringify(requirement.requirement_type)}:
+    - Criteria: ${JSON.stringify(requirement.criteria)}
+    - Response Format: ${getResponseFormatDescription(requirement.requirement_type)}
+    - Important Notes:
+        - Return ONLY the JSON object, no additional text or explanation. This ensures accurate parsing of the candidate's response.
+        - The "assessment" field should be your judgment: "MET" if the candidate meets the requirement, "NOT_MET" if they don't, or "PENDING" if you need more information.
+        - The "confidence" field (optional) should be a number between 0.0 and 1.0 representing how confident you are in your assessment. Higher values indicate greater confidence.
+        - The "message" field should contain the conversational message to send to the candidate. Be friendly, professional, and clear.
+        - When assessment is "MET", provide a brief confirmation in your message. The system will automatically ask the next requirement question if needed.
+        - When assessment is "NOT_MET", provide a clear explanation in your message. Do NOT ask follow-up questions - the requirement is not met.
+        - When assessment is "PENDING", your message should be a follow-up question to gather more information.
+        - If you need to ask follow-up questions, set the "needs_clarification" field to true.
+        - Append the "needs_clarification" field to the JSON object.
+`;
+
+const builderTextToAnswerPortion = (userMessage: string): string => `
+    The user's message is: ${userMessage}
+`;
+
 const buildFocusList = (requirement: JobRequirement): string[] => {
     // Check if criteria has 'required' field (some criteria types have it)
     const isRequired = (requirement.criteria as any)?.required ?? true;
@@ -25,14 +45,26 @@ const buildJSONResponseInstruction = (requirementType: string): string => `
     - Return ONLY the JSON object, no additional text or explanation. This ensures accurate parsing of the candidate's response.
     - The "assessment" field should be your judgment: "MET" if the candidate meets the requirement, "NOT_MET" if they don't, or "PENDING" if you need more information.
     - The "confidence" field (optional) should be a number between 0.0 and 1.0 representing how confident you are in your assessment. Higher values indicate greater confidence.
-    - The "message" field should contain the conversational message to send to the candidate. Be friendly, professional, and clear. Include any follow-up questions if needed.
+    - The "message" field should contain the conversational message to send to the candidate. Be friendly, professional, and clear.
+    
+    Assessment Guidelines:
+    - Use "MET" when the candidate clearly meets or exceeds the requirement (e.g., has 3 years when 2 years is required).
+    - Use "NOT_MET" when the candidate clearly does NOT meet the requirement (e.g., has 1 year when 2 years minimum is required). Do NOT ask follow-up questions when the requirement is clearly not met - mark it as NOT_MET immediately.
+    - Use "PENDING" ONLY when the candidate's answer is unclear, ambiguous, or you need clarification to make a determination (e.g., "some experience" without specifics).
+    
+    Message Guidelines:
+    - When assessment is "MET", provide a brief confirmation in your message. The system will automatically ask the next requirement question if needed.
+    - When assessment is "NOT_MET", provide a clear, professional explanation. Do NOT ask follow-up questions - the requirement is not met.
+    - When assessment is "PENDING", your message should be a follow-up question to gather more information.
 `;
 
 const buildGuidelineListWithRequirement = (): string[] => ([
     '- Be friendly, professional, and conversational',
     '- Ask one question at a time',
-    '- If a candidate\'s answer is unclear or incomplete, ask a clarifying follow-up question before moving on',
-    '- Be encouraging and supportive',
+    '- If a candidate\'s answer is unclear or incomplete, ask a clarifying follow-up question (use PENDING assessment)',
+    '- If a candidate clearly does NOT meet the requirement, mark as NOT_MET immediately - do NOT ask follow-up questions',
+    '- If a candidate clearly meets or exceeds the requirement, mark as MET',
+    '- Be encouraging and supportive, but honest about requirements',
     '- Focus on collecting accurate information about this specific requirement',
     '- Once you have enough information to evaluate this requirement, return the JSON response in the exact format specified above',
 ]);
@@ -57,6 +89,13 @@ export const buildRequirementSystemMessage = (
     
         Guidelines:
         ${guidelines}\n
-        If this is the first requirement, tell them it's the first one :) Let's get started!
+    `
+}
+
+export const buildAnswerCriteriaSystemPrompt = (userMessage: string, requirement: JobRequirement): string => {
+    const header = buildAnswerCriteriaHeaderLine(requirement);
+    return `
+        ${header}
+        ${builderTextToAnswerPortion(userMessage)}
     `
 }
