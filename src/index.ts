@@ -4,10 +4,10 @@
  */
 
 import 'dotenv/config';
-import { ChatWebSocketServer } from './server';
+import { ApplicationGateway } from './server';
 
 const port = parseInt(process.env.PORT || '3000', 10);
-const server = new ChatWebSocketServer(port);
+const server = new ApplicationGateway(port);
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {

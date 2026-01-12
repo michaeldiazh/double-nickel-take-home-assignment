@@ -43,8 +43,11 @@ const getCriteriaResultsFromLLM = async (
   currentRequirement: JobRequirement,
   llmClient: LLMClient
 ): Promise<string> => {
+  console.log(`[RequirementLLMProcessor] getCriteriaResultsFromLLM called with userMessage: "${userMessage}", requirement: ${currentRequirement.id} (${currentRequirement.requirement_type})`);
   const answerCriteriaSystemMessage = buildAnswerCriteriaSystemMessage(userMessage, currentRequirement);
+  console.log(`[RequirementLLMProcessor] Sending to LLM: ${JSON.stringify(answerCriteriaSystemMessage)}`);
   const llmResponse = await llmClient.sendMessage(answerCriteriaSystemMessage);
+  console.log(`[RequirementLLMProcessor] LLM response: ${llmResponse.content}`);
   return llmResponse.content;
 };
 
@@ -63,10 +66,11 @@ export const processRequirementWithLLM = async (
   currentRequirement: JobRequirement,
   deps: LLMProcessorDependencies
 ): Promise<LLMProcessorResult> => {
+  console.log(`[RequirementLLMProcessor] processRequirementWithLLM called with userMessage: "${userMessage}", requirement: ${currentRequirement.id}`);
   // Get criteria results from LLM
   const raw_llm_response = await getCriteriaResultsFromLLM(userMessage, currentRequirement, deps.llmClient);
   
-  console.log(`[RequirementLLMProcessor] LLM response: ${raw_llm_response}`);
+  console.log(`[RequirementLLMProcessor] processRequirementWithLLM - raw_llm_response received: ${raw_llm_response.substring(0, 200)}...`);
   
   // Parse LLM response to extract value, assessment, and message
   const parse_result = parseLLMResponse(currentRequirement.requirement_type, raw_llm_response);

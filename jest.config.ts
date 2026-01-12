@@ -180,10 +180,7 @@ const config: Config = {
   // A map from regular expressions to paths to transformers
   transform: {
     '^.+\\.ts$': ['ts-jest', {
-      tsconfig: {
-        esModuleInterop: true,
-        allowSyntheticDefaultImports: true,
-      },
+      tsconfig: 'tsconfig.json',
     }],
   },
 

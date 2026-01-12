@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import {createServer} from 'http';
 import {WebSocketServer, WebSocket} from 'ws';
+import {Pool} from 'pg';
 import {pool} from '../database';
 import {createLLMClient, LLMProvider} from '../services/llm/client/factory';
 import {ApplicationService} from '../services/application/service';
@@ -21,6 +22,9 @@ import {
     handleDoneConversation,
 } from '../services/sender/handler';
 import {ConversationContextService} from '../services/conversation-context/service';
+import {createUserRoutes} from './routes/user.routes';
+import {createJobRoutes} from './routes/job.routes';
+import {createConversationSummaryRoutes} from './routes/conversation-summary.routes';
 
 /**
  * WebSocket message types
@@ -53,26 +57,358 @@ interface ServerMessage {
 }
 
 /**
- * WebSocket handler for LLM chat
+ * Server dependencies - all services and handlers needed by the server
  */
-export class ChatWebSocketServer {
+interface ServerDependencies {
+    applicationService: ApplicationService;
+    greetingInitialHandler: GreetingInitialHandler;
+    greetingResponseHandler: GreetingResponseHandler;
+    requirementHandler: RequirementHandler;
+    jobQuestionsHandler: JobQuestionsHandler;
+    completionHandler: CompletionHandler;
+    conversationRepo: ConversationRepository;
+    conversationJobRequirementRepo: ConversationJobRequirementRepository;
+    conversationContextService: ConversationContextService;
+}
+
+/**
+ * Parses and validates a raw WebSocket message.
+ * 
+ * @param rawMessage - The raw message string from WebSocket
+ * @returns Parsed and validated ClientMessage, or null if invalid
+ */
+const parseClientMessage = (rawMessage: string): ClientMessage | null => {
+    if (!rawMessage || rawMessage.trim().length === 0) {
+        console.warn('Received empty message');
+        return null;
+    }
+
+    try {
+        const parsed = JSON.parse(rawMessage);
+
+        // Check if this is a server message (has 'event' field) - ignore it
+        if ('event' in parsed && !('type' in parsed)) {
+            // This is a server message being echoed back, ignore it
+            return null;
+        }
+
+        // Validate it has a type field
+        if (!parsed || typeof parsed !== 'object' || !('type' in parsed)) {
+            console.warn('Received message without type field:', parsed);
+            return null;
+        }
+
+        return parsed as ClientMessage;
+    } catch (error) {
+        console.error('Error parsing message:', error);
+        return null;
+    }
+};
+
+/**
+ * Sends a message to the WebSocket client if the connection is open.
+ * 
+ * @param ws - The WebSocket connection
+ * @param message - The message to send
+ */
+const sendMessage = (ws: WebSocket, message: ServerMessage): void => {
+    if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(message));
+    }
+};
+
+/**
+ * Sends an error message to the WebSocket client.
+ * 
+ * @param ws - The WebSocket connection
+ * @param error - The error message
+ */
+const sendError = (ws: WebSocket, error: string): void => {
+    sendMessage(ws, {
+        type: 'error',
+        error,
+    });
+};
+
+/**
+ * Initializes all server dependencies (services and handlers).
+ * 
+ * @returns Initialized dependencies
+ */
+const initializeDependencies = (): ServerDependencies => {
+    const llmClient = createLLMClient({
+        provider: LLMProvider.OPENAI,
+        apiKey: process.env.OPENAI_API_KEY || '',
+        model: process.env.OPENAI_MODEL || ''
+    });
+
+    return {
+        applicationService: new ApplicationService(pool),
+        greetingInitialHandler: new GreetingInitialHandler(pool, llmClient),
+        greetingResponseHandler: new GreetingResponseHandler(pool, llmClient),
+        requirementHandler: new RequirementHandler(pool, llmClient),
+        jobQuestionsHandler: new JobQuestionsHandler(pool, llmClient),
+        completionHandler: new CompletionHandler(pool, llmClient),
+        conversationRepo: new ConversationRepository(pool),
+        conversationJobRequirementRepo: new ConversationJobRequirementRepository(pool),
+        conversationContextService: new ConversationContextService(pool),
+    };
+};
+
+/**
+ * Handles the start_conversation message type.
+ * 
+ * @param ws - The WebSocket connection
+ * @param userId - The user ID
+ * @param jobId - The job ID
+ * @param deps - Server dependencies
+ */
+const handleStartConversation = async (
+    ws: WebSocket,
+    userId: string,
+    jobId: string,
+    deps: ServerDependencies
+): Promise<void> => {
+    try {
+        const result = await handleInitialConversation(ws, userId, jobId, {
+            applicationService: deps.applicationService,
+            greetingInitialHandler: deps.greetingInitialHandler
+        });
+
+        // Send status update after greeting completes
+        sendMessage(ws, {
+            type: 'status_update',
+            conversationId: result.conversationId,
+            status: result.newStatus,
+        });
+    } catch (error) {
+        console.error('Error in handleStartConversation:', error);
+        sendError(ws, error instanceof Error ? error.message : 'Unknown error');
+    }
+};
+
+/**
+ * Status handler function type - handles messages for a specific conversation status
+ */
+type StatusHandler = (
+    ws: WebSocket,
+    conversationId: string,
+    userMessage: string,
+    deps: ServerDependencies
+) => Promise<{ newStatus: ConversationStatus; message: string } | undefined>;
+
+/**
+ * Creates a status handler map that routes messages based on conversation status.
+ * 
+ * @param deps - Server dependencies
+ * @returns Record mapping ConversationStatus to handler functions
+ */
+const createStatusHandlerMap = (deps: ServerDependencies): Partial<Record<ConversationStatus, StatusHandler>> => ({
+    [ConversationStatus.PENDING]: async (ws, conversationId, userMessage) => {
+        // User responding to initial greeting (yes/no)
+        return await handlePendingResponse(ws, conversationId, userMessage, {
+            greetingResponseHandler: deps.greetingResponseHandler,
+            conversationRepo: deps.conversationRepo,
+        });
+    },
+    [ConversationStatus.START]: async (ws, conversationId, userMessage) => {
+        // START is a transient state - route to requirements handler
+        // (shouldn't happen if GreetingResponseHandler sets ON_REQ, but handle it just in case)
+        return await handleRequirementsResponse(ws, conversationId, userMessage, {
+            requirementHandler: deps.requirementHandler,
+            completionHandler: deps.completionHandler,
+            conversationRepo: deps.conversationRepo,
+            conversationJobRequirementRepo: deps.conversationJobRequirementRepo,
+        });
+    },
+    [ConversationStatus.ON_REQ]: async (ws, conversationId, userMessage) => {
+        // Handle requirement question response
+        return await handleRequirementsResponse(ws, conversationId, userMessage, {
+            requirementHandler: deps.requirementHandler,
+            completionHandler: deps.completionHandler,
+            conversationRepo: deps.conversationRepo,
+            conversationJobRequirementRepo: deps.conversationJobRequirementRepo,
+        });
+    },
+    [ConversationStatus.ON_JOB_QUESTIONS]: async (ws, conversationId, userMessage) => {
+        // Handle job question
+        return await handleJobQuestionsResponse(ws, conversationId, userMessage, {
+            jobQuestionsHandler: deps.jobQuestionsHandler,
+            completionHandler: deps.completionHandler,
+            conversationRepo: deps.conversationRepo,
+        });
+    },
+    [ConversationStatus.DONE]: async (ws, conversationId) => {
+        // Conversation is done - send completion message
+        // Note: DONE handler doesn't use userMessage, but we include it for type consistency
+        return await handleDoneConversation(ws, conversationId, {
+            completionHandler: deps.completionHandler,
+        });
+    },
+});
+
+/**
+ * Routes a send_message to the appropriate handler based on conversation status.
+ * 
+ * @param ws - The WebSocket connection
+ * @param conversationId - The conversation ID
+ * @param userMessage - The user's message
+ * @param deps - Server dependencies
+ */
+const routeSendMessage = async (
+    ws: WebSocket,
+    conversationId: string,
+    userMessage: string,
+    deps: ServerDependencies
+): Promise<void> => {
+    try {
+        // Get conversation to check status
+        const conversation = await deps.conversationRepo.getById(conversationId);
+        if (!conversation) {
+            sendError(ws, `Conversation ${conversationId} not found`);
+            return;
+        }
+
+        // Get handler for this status
+        const statusHandlerMap = createStatusHandlerMap(deps);
+        const handler = statusHandlerMap[conversation.conversation_status];
+
+        if (!handler) {
+            sendError(ws, `Unknown conversation status: ${conversation.conversation_status}`);
+            return;
+        }
+
+        // Execute handler
+        const result = await handler(ws, conversationId, userMessage, deps);
+
+        // Send status update if status changed
+        if (result) {
+            sendMessage(ws, {
+                type: 'status_update',
+                conversationId,
+                status: result.newStatus,
+            });
+        }
+    } catch (error) {
+        console.error('Error in routeSendMessage:', error);
+        sendError(ws, error instanceof Error ? error.message : 'Unknown error');
+    }
+};
+
+/**
+ * Handles the end_conversation message type.
+ * 
+ * @param ws - The WebSocket connection
+ * @param conversationId - The conversation ID
+ */
+const handleEndConversation = (ws: WebSocket, conversationId: string): void => {
+    sendMessage(ws, {
+        type: 'conversation_end',
+        conversationId,
+        message: 'Conversation ended',
+    });
+};
+
+/**
+ * Handles incoming client messages and routes them to the appropriate handler.
+ * 
+ * @param ws - The WebSocket connection
+ * @param message - The parsed client message
+ * @param deps - Server dependencies
+ */
+const handleClientMessage = async (
+    ws: WebSocket,
+    message: ClientMessage,
+    deps: ServerDependencies
+): Promise<void> => {
+    switch (message.type) {
+        case 'start_conversation':
+            await handleStartConversation(ws, message.userId, message.jobId, deps);
+            break;
+        case 'send_message':
+            await routeSendMessage(ws, message.conversationId, message.message, deps);
+            break;
+        case 'end_conversation':
+            handleEndConversation(ws, message.conversationId);
+            break;
+        default:
+            const messageType = (message as any).type ?? 'undefined';
+            console.warn(`Unknown message type: ${messageType}`, message);
+            sendError(ws, `Unknown message type: ${messageType}`);
+    }
+};
+
+/**
+ * Sets up WebSocket event handlers for a new connection.
+ * 
+ * @param ws - The WebSocket connection
+ * @param deps - Server dependencies
+ */
+const setupWebSocketHandlers = (ws: WebSocket, deps: ServerDependencies): void => {
+    console.log('New WebSocket connection established');
+
+    ws.on('message', async (data: Buffer) => {
+        try {
+            const rawMessage = data.toString();
+            const parsedMessage = parseClientMessage(rawMessage);
+
+            if (!parsedMessage) {
+                // parseClientMessage already logged the issue
+                if (rawMessage && rawMessage.trim().length > 0) {
+                    // Only send error if it was a real message (not empty or server echo)
+                    sendError(ws, 'Invalid message format');
+                }
+                return;
+            }
+
+            await handleClientMessage(ws, parsedMessage, deps);
+        } catch (error) {
+            console.error('Error handling message:', error);
+            sendError(ws, error instanceof Error ? error.message : 'Unknown error');
+        }
+    });
+
+    ws.on('close', () => {
+        console.log('WebSocket connection closed');
+    });
+
+    ws.on('error', (error) => {
+        console.error('WebSocket error:', error);
+    });
+};
+
+/**
+ * Application Gateway - unified entry point for HTTP REST API and WebSocket connections
+ * Routes HTTP requests to REST endpoints and WebSocket messages to chat handlers
+ * The WebSocket server attaches to the HTTP server instance
+ */
+export class ApplicationGateway {
     private app: express.Application;
     private server: ReturnType<typeof createServer>;
     private wss: WebSocketServer;
-    private applicationService: ApplicationService;
-    private greetingInitialHandler: GreetingInitialHandler;
-    private greetingResponseHandler: GreetingResponseHandler;
-    private requirementHandler: RequirementHandler;
-    private jobQuestionsHandler: JobQuestionsHandler;
-    private completionHandler: CompletionHandler;
-    private conversationRepo: ConversationRepository;
-    private conversationJobRequirementRepo: ConversationJobRequirementRepository;
-    private conversationContextService: ConversationContextService;
+    private deps: ServerDependencies;
 
     constructor(port: number = 3000) {
         // Initialize Express app
         this.app = express();
         this.app.use(express.json());
+
+        // Enable CORS for local development - allow all origins
+        this.app.use((req, res, next) => {
+            res.header('Access-Control-Allow-Origin', '*');
+            res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+            res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+            
+            // Handle preflight requests
+            if (req.method === 'OPTIONS') {
+                return res.sendStatus(200);
+            }
+            
+            next();
+        });
+
+        // Register HTTP routes
+        this.registerRoutes(pool);
 
         // Create HTTP server
         this.server = createServer(this.app);
@@ -80,25 +416,12 @@ export class ChatWebSocketServer {
         // Create WebSocket server
         this.wss = new WebSocketServer({server: this.server});
 
-        // Initialize services and handlers
-        const llmClient = createLLMClient({
-            provider: LLMProvider.OPENAI,
-            apiKey: process.env.OPENAI_API_KEY || '',
-            model: process.env.OPENAI_MODEL || ''
-        });
+        // Initialize dependencies
+        this.deps = initializeDependencies();
 
-        this.applicationService = new ApplicationService(pool);
-        this.greetingInitialHandler = new GreetingInitialHandler(pool, llmClient);
-        this.greetingResponseHandler = new GreetingResponseHandler(pool, llmClient);
-        this.requirementHandler = new RequirementHandler(pool, llmClient);
-        this.jobQuestionsHandler = new JobQuestionsHandler(pool, llmClient);
-        this.completionHandler = new CompletionHandler(pool, llmClient);
-        this.conversationRepo = new ConversationRepository(pool);
-        this.conversationJobRequirementRepo = new ConversationJobRequirementRepository(pool);
-        this.conversationContextService = new ConversationContextService(pool);
         // Setup WebSocket connection handling
         this.wss.on('connection', (ws: WebSocket) => {
-            this.handleConnection(ws);
+            setupWebSocketHandlers(ws, this.deps);
         });
 
         // Start server
@@ -109,214 +432,12 @@ export class ChatWebSocketServer {
     }
 
     /**
-     * Handle new WebSocket connection
+     * Register all HTTP routes
      */
-    private handleConnection(ws: WebSocket): void {
-        console.log('New WebSocket connection established');
-
-        ws.on('message', async (data: Buffer) => {
-            try {
-                const rawMessage = data.toString();
-                if (!rawMessage || rawMessage.trim().length === 0) {
-                    console.warn('Received empty message');
-                    return;
-                }
-
-                const parsed = JSON.parse(rawMessage);
-
-                // Check if this is a server message (has 'event' field) - ignore it
-                if ('event' in parsed && !('type' in parsed)) {
-                    // This is a server message being echoed back, ignore it
-                    return;
-                }
-
-                // Validate it has a type field
-                if (!parsed || typeof parsed !== 'object' || !('type' in parsed)) {
-                    console.warn('Received message without type field:', parsed);
-                    this.sendError(ws, 'Message must have a type field');
-                    return;
-                }
-
-                const message: ClientMessage = parsed as ClientMessage;
-                await this.handleMessage(ws, message);
-            } catch (error) {
-                console.error('Error handling message:', error);
-                this.sendError(ws, error instanceof Error ? error.message : 'Unknown error');
-            }
-        });
-
-        ws.on('close', () => {
-            console.log('WebSocket connection closed');
-        });
-
-        ws.on('error', (error) => {
-            console.error('WebSocket error:', error);
-        });
-    }
-
-    /**
-     * Handle incoming message from client
-     */
-    private async handleMessage(ws: WebSocket, message: ClientMessage): Promise<void> {
-        switch (message.type) {
-            case 'start_conversation':
-                await this.handleStartConversation(ws, message.userId, message.jobId);
-                break;
-            case 'send_message':
-                await this.handleSendMessage(ws, message.conversationId, message.message);
-                break;
-            case 'end_conversation':
-                await this.handleEndConversation(ws, message.conversationId);
-                break;
-            default:
-                const messageType = (message as any).type ?? 'undefined';
-                console.warn(`Unknown message type: ${messageType}`, message);
-                this.sendError(ws, `Unknown message type: ${messageType}`);
-        }
-    }
-
-    /**
-     * Handle start conversation - create application and conversation, send initial greeting
-     */
-    private async handleStartConversation(ws: WebSocket, userId: string, jobId: string): Promise<void> {
-        try {
-            const result = await handleInitialConversation(ws, userId, jobId, {
-                applicationService: this.applicationService,
-                greetingInitialHandler: this.greetingInitialHandler
-            });
-
-            // Send status update after greeting completes
-            this.sendMessage(ws, {
-                type: 'status_update',
-                conversationId: result.conversationId,
-                status: result.newStatus,
-            });
-        } catch (error) {
-            console.error('Error in handleStartConversation:', error);
-            this.sendError(ws, error instanceof Error ? error.message : 'Unknown error');
-        }
-    }
-
-    /**
-     * Handle send message - route to appropriate handler based on conversation status
-     */
-    private async handleSendMessage(ws: WebSocket, conversationId: string, userMessage: string): Promise<void> {
-        try {
-            // Get conversation to check status
-            const conversation = await this.conversationRepo.getById(conversationId);
-            if (!conversation) {
-                this.sendError(ws, `Conversation ${conversationId} not found`);
-                return;
-            }
-
-            // Create stream options for WebSocket
-            const streamOptions = {
-                onChunk: (chunk: string) => {
-                    this.sendMessage(ws, {
-                        type: 'message',
-                        conversationId,
-                        message: chunk,
-                    });
-                },
-                onComplete: () => {
-                    // Optional: send completion signal
-                },
-                onError: (error: Error) => {
-                    this.sendError(ws, error.message);
-                },
-            };
-
-            // Route to appropriate handler based on conversation status
-            let result;
-            switch (conversation.conversation_status) {
-                case ConversationStatus.PENDING:
-                    // User responding to initial greeting (yes/no)
-                    result = await handlePendingResponse(ws, conversationId, userMessage, {
-                        greetingResponseHandler: this.greetingResponseHandler,
-                        conversationRepo: this.conversationRepo,
-                    });
-                    break;
-                case ConversationStatus.START:
-                    // START is a transient state - route to requirements handler
-                    // (shouldn't happen if GreetingResponseHandler sets ON_REQ, but handle it just in case)
-                    result = await handleRequirementsResponse(ws, conversationId, userMessage, {
-                        requirementHandler: this.requirementHandler,
-                        conversationRepo: this.conversationRepo,
-                        conversationJobRequirementRepo: this.conversationJobRequirementRepo,
-                    });
-                    break;
-                case ConversationStatus.ON_REQ:
-                    // Handle requirement question response
-                    result = await handleRequirementsResponse(ws, conversationId, userMessage, {
-                        requirementHandler: this.requirementHandler,
-                        conversationRepo: this.conversationRepo,
-                        conversationJobRequirementRepo: this.conversationJobRequirementRepo,
-                    });
-                    break;
-                case ConversationStatus.ON_JOB_QUESTIONS:
-                    // Handle job question
-                    result = await handleJobQuestionsResponse(ws, conversationId, userMessage, {
-                        jobQuestionsHandler: this.jobQuestionsHandler,
-                        completionHandler: this.completionHandler,
-                        conversationRepo: this.conversationRepo,
-                    });
-                    break;
-                case ConversationStatus.DONE:
-                    // Conversation is done - send completion message
-                    result = await handleDoneConversation(ws, conversationId, {
-                        completionHandler: this.completionHandler,
-                    });
-                    break;
-                default:
-                    this.sendError(ws, `Unknown conversation status: ${conversation.conversation_status}`);
-                    return;
-            }
-
-            // Send status update if status changed
-            if (result) {
-                this.sendMessage(ws, {
-                    type: 'status_update',
-                    conversationId,
-                    status: result.newStatus,
-                });
-
-            }
-        } catch (error) {
-            console.error('Error in handleSendMessage:', error);
-            this.sendError(ws, error instanceof Error ? error.message : 'Unknown error');
-        }
-    }
-
-
-    /**
-     * Handle end conversation
-     */
-    private async handleEndConversation(ws: WebSocket, conversationId: string): Promise<void> {
-        // Close connection or send confirmation
-        this.sendMessage(ws, {
-            type: 'conversation_end',
-            conversationId,
-            message: 'Conversation ended',
-        });
-    }
-
-    /**
-     * Send message to client
-     */
-    private sendMessage(ws: WebSocket, message: ServerMessage): void {
-        if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify(message));
-        }
-    }
-
-    /**
-     * Send error message to client
-     */
-    private sendError(ws: WebSocket, error: string): void {
-        this.sendMessage(ws, {
-            type: 'error',
-            error,
-        });
+    private registerRoutes(pool: Pool): void {
+        this.app.use('/', createUserRoutes(pool));
+        this.app.use('/', createJobRoutes(pool));
+        this.app.use('/', createConversationSummaryRoutes(pool));
     }
 
     /**
@@ -340,7 +461,7 @@ export class ChatWebSocketServer {
 // Start server if this file is run directly
 if (require.main === module) {
     const port = parseInt(process.env.PORT || '3000', 10);
-    const server = new ChatWebSocketServer(port);
+    const server = new ApplicationGateway(port);
 
     // Graceful shutdown
     process.on('SIGTERM', async () => {

@@ -76,6 +76,25 @@ export class ConversationRepository {
   }
 
   /**
+   * Get conversation by application ID.
+   */
+  async getByApplicationId(applicationId: string): Promise<Conversation | null> {
+    const query = `
+      SELECT id, application_id, is_active, conversation_status, screening_decision, screening_summary, created_at, updated_at
+      FROM conversations
+      WHERE application_id = $1
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    
+    const result = await this.client.query<Conversation>(query, [applicationId]);
+    
+    if (result.rows.length === 0) return null;
+    
+    return conversationSchema.parse(result.rows[0]);
+  }
+
+  /**
    * Get conversation context (with user and job data).
    * Simple JOIN query - no view needed.
    */

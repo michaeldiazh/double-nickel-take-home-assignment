@@ -85,6 +85,7 @@ describe('routeRequirementState', () => {
       currentRequirementId,
       RequirementStatus.MET,
       assistantMessage,
+      'user message', // userMessage
       false, // needsClarification
       mockStreamOptions,
       deps
@@ -145,6 +146,7 @@ describe('routeRequirementState', () => {
       currentRequirementId,
       RequirementStatus.MET,
       assistantMessage,
+      'user message', // userMessage
       false, // needsClarification
       mockStreamOptions,
       deps
@@ -182,6 +184,7 @@ describe('routeRequirementState', () => {
       currentRequirementId,
       RequirementStatus.NOT_MET,
       assistantMessage,
+      'user message', // userMessage
       false, // needsClarification
       mockStreamOptions,
       deps
@@ -216,6 +219,7 @@ describe('routeRequirementState', () => {
       currentRequirementId,
       RequirementStatus.PENDING,
       assistantMessage,
+      'user message', // userMessage
       false, // needsClarification
       mockStreamOptions,
       deps
@@ -271,6 +275,7 @@ describe('routeRequirementState', () => {
       currentRequirementId,
       RequirementStatus.MET,
       assistantMessage,
+      'user message', // userMessage
       false, // needsClarification
       mockStreamOptions,
       deps
@@ -291,13 +296,29 @@ describe('routeRequirementState', () => {
       { job_requirement_id: 'req-1', status: RequirementStatus.PENDING, priority: 1 },
     ];
 
+    const mockContext = {
+      status: ConversationStatus.ON_REQ,
+      user: { id: 'user-1' },
+      job: { id: 'job-1' },
+      current_requirement: {
+        id: 'req-1',
+        requirement_type: 'YEARS_EXPERIENCE',
+        criteria: { required: true, min_years: 2 },
+      },
+    };
+
     mockConversationJobRequirementRepo.getConversationRequirements.mockResolvedValue(allRequirements);
+    mockContextService.loadFullContext.mockResolvedValue(mockContext);
+    mockProcessor.mockResolvedValue({
+      assistantMessage: 'Can you provide more details about your experience?',
+    });
 
     const result = await routeRequirementState(
       conversationId,
       currentRequirementId,
       RequirementStatus.PENDING,
       assistantMessage,
+      '', // userMessage
       true, // needsClarification
       mockStreamOptions,
       deps
@@ -305,7 +326,6 @@ describe('routeRequirementState', () => {
 
     expect(mockStreamOptions.onChunk).toHaveBeenCalled();
     expect(mockStreamOptions.onComplete).toHaveBeenCalled();
-    expect(result.assistantMessage).toBe(assistantMessage);
     expect(result.newStatus).toBe(ConversationStatus.ON_REQ);
     expect(result.requirementMet).toBeNull();
     expect(result.needsClarification).toBe(true);

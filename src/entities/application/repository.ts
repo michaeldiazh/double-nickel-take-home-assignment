@@ -76,4 +76,29 @@ export class ApplicationRepository {
     
     return result.rows[0];
   }
+
+  /**
+   * Get all applications for a user with job and conversation data.
+   * Returns applications with job name, description, location, and screening decision.
+   */
+  async getApplicationsWithJobAndConversationByUserId(userId: string) {
+    const query = `
+      SELECT 
+        a.id as application_id,
+        a.job_id,
+        a.created_at,
+        j.name as job_name,
+        j.description as job_description,
+        COALESCE(j.location, '') as job_location,
+        c.screening_decision
+      FROM applications a
+      JOIN jobs j ON a.job_id = j.id
+      LEFT JOIN conversations c ON c.application_id = a.id
+      WHERE a.user_id = $1
+      ORDER BY a.created_at DESC
+    `;
+    
+    const result = await this.client.query(query, [userId]);
+    return result.rows;
+  }
 }

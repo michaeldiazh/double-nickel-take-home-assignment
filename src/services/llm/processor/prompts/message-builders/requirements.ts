@@ -17,15 +17,10 @@ const buildAnswerCriteriaHeaderLine = (requirement: JobRequirement): string => `
         - The "needs_clarification" field (boolean) should be set to true if you need more information from the candidate to make a determination otherwise false.
             
     - Assessment Guidelines:
-        - DO NOT SET anything to MET or NOT_MET if you need more information - use PENDING and set "needs_clarification" to true.
-           Examples of when to use PENDING: 
-                - ambiguous answers
-                - Rambling answers that don't directly address the requirement
-                - Answers with no direct relevance to the requirement 
-                - incomplete information, or if you need clarification.
         - When assessment is "MET", provide a brief confirmation in your message. The system will automatically ask the next requirement question if needed.
         - When assessment is "NOT_MET", provide a clear explanation in your message. Do NOT ask follow-up questions - the requirement is not met.
         - When assessment is "PENDING", your message should be a follow-up question to gather more information.
+        - Set needs_clarification to false if you have enough information to evaluate the requirement and set the assessment to MET or NOT_MET.
         SUPER IMPORTANT:
         - If you need to ask follow-up questions, set the "needs_clarification" field to true. DO NOT set NOT_MET if you need clarification.
         - Don't set anything to MET or NOT_MET if you need more information - use PENDING and set "needs_clarification" to true.

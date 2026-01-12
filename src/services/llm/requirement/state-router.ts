@@ -23,6 +23,7 @@ import {getRequirementStatusSummary, areAllRequiredMet, getTop3RequirementIds} f
 import {parseLLMResponse} from '../../criteria/parser';
 import {extractJSONObject, removeJSONFromText} from '../../criteria/parser/utils';
 import {buildFollowUpRequirementPrompt} from "../processor/prompts/question-prompt";
+import {isRequiredCriteria} from '../../criteria/criteria-types';
 
 export interface StateRouterDependencies {
     conversationRepo: ConversationRepository;
@@ -70,22 +71,26 @@ const handleStatusTransition = async (
 
     // If not met and required, set to DENIED
     if (evaluationResult === RequirementStatus.NOT_MET) {
+        console.log(`[RequirementStateRouter] NOT_MET detected for requirement ${currentJobRequirementId}`);
         const conversationRequirement = await deps.conversationJobRequirementRepo.getConversationRequirements(conversationId);
         const currentReq = conversationRequirement.find(cr => cr.job_requirement_id === currentJobRequirementId);
 
         if (currentReq) {
             const jobReq = await deps.jobRequirementRepo.getById(currentJobRequirementId);
-            if (jobReq) {
-                if (jobReq.criteria.required) {
-                    // Required requirement not met - deny
-                    await deps.conversationRepo.update(conversationId, {
-                        conversation_status: ConversationStatus.DONE,
-                        screening_decision: ScreeningDecision.DENIED,
-                        is_active: false,
-                    });
-                    return ConversationStatus.DONE;
-                }
+            if (jobReq && isRequiredCriteria(jobReq.criteria)) {
+                // Required requirement not met - deny
+                console.log(`[RequirementStateRouter] Required requirement NOT_MET - setting status to DONE and DENIED`);
+                await deps.conversationRepo.update(conversationId, {
+                    conversation_status: ConversationStatus.DONE,
+                    screening_decision: ScreeningDecision.DENIED,
+                    is_active: false,
+                });
+                return ConversationStatus.DONE;
+            } else {
+                console.log(`[RequirementStateRouter] Requirement NOT_MET but not required - continuing`);
             }
+        } else {
+            console.log(`[RequirementStateRouter] Could not find requirement ${currentJobRequirementId} in conversation requirements`);
         }
     }
 
@@ -369,7 +374,30 @@ export const routeRequirementState = async (
     streamOptions: StreamOptions | undefined,
     deps: StateRouterDependencies
 ): Promise<StateRouterResult> => {
-    // 1. Handle follow-up case first (needs clarification)
+    // 0. Handle status transitions FIRST (before follow-up check)
+    // This ensures status is set to DONE if a required requirement is NOT_MET
+    // before we try to load context for follow-ups
+    const newStatus = await handleStatusTransition(
+        conversationId,
+        currentRequirementId,
+        evaluationResult,
+        deps
+    );
+
+    // If status is DONE (e.g., required requirement NOT_MET), don't process follow-ups
+    // Just stream the message and return
+    if (newStatus === ConversationStatus.DONE) {
+        console.log(`[RequirementStateRouter] Status is DONE - streaming final message and returning`);
+        streamMessage(assistantMessage, streamOptions);
+        return {
+            assistantMessage,
+            newStatus: ConversationStatus.DONE,
+            requirementMet: evaluationResult === RequirementStatus.MET ? true :
+                evaluationResult === RequirementStatus.NOT_MET ? false : null,
+        };
+    }
+
+    // 1. Handle follow-up case (needs clarification)
     // Generate a proper follow-up question using the follow-up prompt builder
     if (needsClarification) {
         // Load context and set up for follow-up prompt
@@ -428,15 +456,7 @@ export const routeRequirementState = async (
         };
     }
 
-    // 2. Handle status transitions (check AFTER update is committed)
-    const newStatus = await handleStatusTransition(
-        conversationId,
-        currentRequirementId,
-        evaluationResult,
-        deps
-    );
-
-    // 3. Handle transitions based on evaluation result
+    // 2. Handle transitions based on evaluation result
     // Only handle MET case - null/PENDING/NOT_MET will fall through to streaming
     if (evaluationResult === RequirementStatus.MET) {
         const transitionResult = await handleMetRequirementTransition(
@@ -454,6 +474,7 @@ export const routeRequirementState = async (
 
     // 4. For NOT_MET, PENDING, or null cases, stream the message and return
     // null means no evaluation could be performed (treated like PENDING)
+    console.log(`[RequirementStateRouter] Streaming message for evaluationResult: ${evaluationResult}, newStatus: ${newStatus}`);
     streamMessage(assistantMessage, streamOptions);
 
     return {

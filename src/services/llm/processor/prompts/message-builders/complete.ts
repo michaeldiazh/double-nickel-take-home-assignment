@@ -1,22 +1,30 @@
 import {ConversationContext} from "../prompt-context";
+import {ScreeningDecision} from "../../../../../entities";
 
 const buildCompleteHeader = (firstName: string, jobTitle: string): string => `
     Okay chat! You've reached the end of the interview for ${firstName} for the position of ${jobTitle}.
 `
 
-const buildSummaryInstruction = (): string => `
+const buildSummaryInstruction = (screeningDecision: ScreeningDecision): string => {
+    const isDenied = screeningDecision === ScreeningDecision.DENIED;
+    const statusText = isDenied ? 'DENIED' : 'APPROVED';
+    
+    return `
     Here's the summary instruction:
-    - First, clearly state whether the candidate PASSED or FAILED the qualification bar based on whether all requirements were met.
+    - IMPORTANT: The screening decision is ${statusText}. ${isDenied ? 'The candidate did NOT meet all required qualifications.' : 'The candidate met all required qualifications.'}
+    - First, clearly state the candidate's qualification status: ${statusText}${isDenied ? ' (DENIED)' : ' (APPROVED)'}
+    - ${isDenied ? 'Clearly explain that the candidate did not meet all required qualifications and the application cannot proceed.' : 'Confirm that the candidate met all required qualifications.'}
     - Summarize the candidate's qualifications based on the requirements discussed during the interview.
     - Include a brief summary of the conversation, highlighting:
         * Which requirements were met (and the candidate's responses)
-        * Any requirements that were not met (if applicable)
+        * ${isDenied ? 'Which required requirements were NOT met (this is critical - explain why the application cannot proceed)' : 'Any optional requirements that were not met (if applicable)'}
         * Key strengths and qualifications
         * Any areas that may need improvement (if applicable)
     - Maintain a professional and appreciative tone throughout the summary.
     - Thank the candidate for their time and interest in the position.
-    - Format the summary clearly with sections for: Pass/Fail Status, Qualifications Summary, and Next Steps.
-`
+    - Format the summary clearly with sections for: Qualification Status (${statusText}), Qualifications Summary, and Next Steps.
+`;
+}
 
 const userDidNotMeetAllRequirementDetail = (context: ConversationContext, requirements: any[]): string => {
     const unmetRequirements = context.conversation_requirements.filter(cr => cr.status !== 'MET');
@@ -64,11 +72,14 @@ const getRequirementDetailSection = (context: ConversationContext): string => {
 /**
  * Builds a system ChatMessage indicating the interview is complete.
  */
-export const buildCompletionSystemPromptMessage = (context: ConversationContext): string => {
+export const buildCompletionSystemPromptMessage = (
+    context: ConversationContext,
+    screeningDecision: ScreeningDecision
+): string => {
     const {user_first_name, job_title} = context;
     const header = buildCompleteHeader(user_first_name, job_title);
     const requirementDetails = getRequirementDetailSection(context);
-    const summaryInstruction = buildSummaryInstruction();
+    const summaryInstruction = buildSummaryInstruction(screeningDecision);
     return `
         ${header}
         

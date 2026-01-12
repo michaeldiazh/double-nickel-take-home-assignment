@@ -46,7 +46,7 @@ const extractValue = <T extends ConversationRequirementValue>(content: string, p
     
     // Clean the message to remove any embedded JSON (parser's responsibility)
     const cleanedMessage = message ? removeJSONFromText(message) : null;
-    
+    console.log(`[extractValue] cleanedMessage: ${cleanedMessage}`);
     // Always try to extract from JSON payload first (more structured and validated)
     const jsonResult = extractValueFromPayload(content, valueSchema);
     if (jsonResult) {
@@ -97,6 +97,7 @@ export const parseLLMResponse = <T extends ConversationRequirementValue>(
     requirementType: JobRequirementType,
     content: string
 ): ParseResult<T> => {
+    console.log(`[parseLLMResponse] content: ${content}`);
     const parserContext = parserContextMap[requirementType];
     if (!parserContext) {
         // Even for unsupported types, try to clean the content

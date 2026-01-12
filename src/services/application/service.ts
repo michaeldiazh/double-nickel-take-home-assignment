@@ -65,4 +65,12 @@ export class ApplicationService {
   async getApplicationWithContext(applicationId: string) {
     return await this.applicationRepo.getWithUserAndJob(applicationId);
   }
+
+  /**
+   * Get all applications for a user with job and conversation data.
+   * Returns raw database rows with job and conversation information.
+   */
+  async getApplicationsWithJobAndConversationByUserId(userId: string) {
+    return await this.applicationRepo.getApplicationsWithJobAndConversationByUserId(userId);
+  }
 }

@@ -4,7 +4,7 @@ import { ConversationJobRequirementRepository } from '../../../entities/conversa
 import { JobRequirementRepository } from '../../../entities/job-requirement/repository';
 import { JobFactRepository } from '../../../entities/job-fact/repository';
 import { ConversationContext } from '../processor/prompts/prompt-context';
-import { ConversationStatus } from '../../../entities';
+import { ConversationStatus, ScreeningDecision } from '../../../entities';
 import { MessageRole, ChatMessage } from '../client';
 import { ConversationJobRequirement } from '../../../entities/conversation-job-requirement/domain';
 
@@ -24,6 +24,7 @@ export interface ContextBuilderDependencies {
  */
 export interface ContextBuilderResult {
   context: ConversationContext;
+  screeningDecision: ScreeningDecision;
 }
 
 /**
@@ -103,5 +104,8 @@ export const buildDoneContext = async (
     status: ConversationStatus.DONE,
   };
 
-  return { context };
+  return { 
+    context,
+    screeningDecision: repoContext.screening_decision,
+  };
 };

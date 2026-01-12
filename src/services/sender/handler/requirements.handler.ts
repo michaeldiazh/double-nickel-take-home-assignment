@@ -1,14 +1,15 @@
 import { WebSocket } from 'ws';
 import { RequirementHandler } from '../../llm/requirement/handler';
-import { ConversationStatus, ScreeningDecision } from '../../../entities';
+import { CompletionHandler } from '../../llm/completion/handler';
+import { ConversationStatus } from '../../../entities';
 import { ConversationRepository } from '../../../entities/conversation/repository';
 import { ConversationJobRequirementRepository } from '../../../entities/conversation-job-requirement/repository';
 import { ServerStreamEvent } from '../../../server/types';
 import { buildStreamOptionsForActiveStream } from '../../../server/builder/stream-option.builder';
-import { RequirementStatus } from '../../../entities/conversation-job-requirement/domain';
 
 export interface RequirementsHandlerDependencies {
   requirementHandler: RequirementHandler;
+  completionHandler: CompletionHandler;
   conversationRepo: ConversationRepository;
   conversationJobRequirementRepo: ConversationJobRequirementRepository;
 }
@@ -40,24 +41,25 @@ export const handleRequirementsResponse = async (
     streamOptions
   );
 
-  // Check if any requirement was NOT_MET -> DENIED
-  if (result.requirementMet === false) {
-    const conversationRequirements = await deps.conversationJobRequirementRepo.getConversationRequirements(conversationId);
-    const hasNotMet = conversationRequirements.some(cr => cr.status === RequirementStatus.NOT_MET);
+  // If conversation is done (either from NOT_MET or state router set it to DONE), generate completion summary
+  if (result.newStatus === ConversationStatus.DONE) {
+    // Generate completion summary first (non-streaming) to get the full message
+    const completionMessage = await deps.completionHandler.sendCompletionMessage(
+      conversationId,
+      undefined // Don't stream - we'll send the complete message at once
+    );
     
-    if (hasNotMet) {
-      // Any requirement NOT_MET -> set DENIED and close
-      await deps.conversationRepo.update(conversationId, {
-        conversation_status: ConversationStatus.DONE,
-        screening_decision: ScreeningDecision.DENIED,
-        is_active: false,
-      });
-      
-      return {
-        newStatus: ConversationStatus.DONE,
-        message: result.assistantMessage,
-      };
+    // Send the complete message as a single message (not token by token)
+    const completionStreamOptions = streamOptionsBuilder(conversationId, ServerStreamEvent.CONVERSATION_END);
+    if (completionStreamOptions && completionMessage) {
+      completionStreamOptions.onChunk(completionMessage);
+      completionStreamOptions.onComplete?.();
     }
+
+    return {
+      newStatus: ConversationStatus.DONE,
+      message: completionMessage, // Return the completion summary
+    };
   }
 
   // Return result (could be ON_REQ if more requirements, or ON_JOB_QUESTIONS if all met)

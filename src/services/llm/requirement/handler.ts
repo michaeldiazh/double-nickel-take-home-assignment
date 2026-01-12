@@ -75,6 +75,7 @@ export class RequirementHandler {
             conversationJobRequirementRepo: this.conversationJobRequirementRepo,
             jobRequirementRepo: this.jobRequirementRepo,
             messageRepo: this.messageRepo,
+            conversationRepo: this.conversationRepo,
         };
 
         const stateRouterDeps: StateRouterDependencies = {
@@ -121,6 +122,7 @@ export class RequirementHandler {
         // Step 5: Route next message and state based on evaluation results
         // Use needsClarification from processor (determined by parser) or from evaluator (if evaluation failed)
         // The evaluator may also set needsClarification if evaluationResult is null
+        console.log(`[RequirementHandler] Routing state - evaluationResult: ${evaluationResult.evaluationResult}, needsClarification: ${needsClarification || evaluationResult.needsClarification}`);
         const routerResult = await routeRequirementState(
             conversationId,
             currentRequirement.id,
@@ -131,12 +133,23 @@ export class RequirementHandler {
             streamOptions,
             stateRouterDeps
         );
+        console.log(`[RequirementHandler] Router returned - newStatus: ${routerResult.newStatus}, needsClarification: ${routerResult.needsClarification}, requirementMet: ${routerResult.requirementMet}`);
         if (routerResult.needsClarification) {
             return {
                 assistantMessage: routerResult.assistantMessage,
                 newStatus: routerResult.newStatus,
                 requirementMet: null,
             }
+        }
+        
+        // If conversation is DONE, we should not continue processing
+        if (routerResult.newStatus === ConversationStatus.DONE) {
+            console.log(`[RequirementHandler] Conversation is DONE - returning early`);
+            return {
+                assistantMessage: routerResult.assistantMessage,
+                newStatus: routerResult.newStatus,
+                requirementMet: routerResult.requirementMet,
+            };
         }
 
         // Step 6: Save the final assistant message if it exists and is different from the initial one

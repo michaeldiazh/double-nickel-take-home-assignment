@@ -10,20 +10,22 @@
 import {ConversationJobRequirementRepository} from '../../../entities/conversation-job-requirement/repository';
 import {
     ConversationJobRequirement,
-    UpdateConversationJobRequirement,
     RequirementStatus
 } from '../../../entities/conversation-job-requirement/domain';
 import {JobRequirement} from '../../../entities/job-requirement/domain';
 import {JobRequirementRepository} from '../../../entities/job-requirement/repository';
 import {MessageRepository} from '../../../entities/message/repository';
+import {ConversationRepository} from '../../../entities/conversation/repository';
+import {ScreeningDecision} from '../../../entities/conversation/domain';
 import {ParseResult} from '../../criteria/parser';
-import {ConversationRequirementValue, JobRequirementCriteria, JobRequirementType} from '../../criteria/criteria-types';
+import {ConversationRequirementValue, JobRequirementCriteria, JobRequirementType, isRequiredCriteria} from '../../criteria/criteria-types';
 import {evaluateRequirement} from '../../criteria/handlers/router';
 
 export interface EvaluatorDependencies {
     conversationJobRequirementRepo: ConversationJobRequirementRepository;
     jobRequirementRepo: JobRequirementRepository;
     messageRepo: MessageRepository;
+    conversationRepo: ConversationRepository;
 }
 
 export interface EvaluatorResult {
@@ -109,15 +111,17 @@ const runCriteriaEvaluation = (
     requirementType: JobRequirementType,
     criteria: JobRequirementCriteria
 ): RequirementStatus | null => {
-    // Priority 1: If we successfully parsed a value, evaluate it against criteria
-    if (parseResult.success && parseResult.value) {
-        return evaluateRequirement(requirementType, criteria, parseResult.value);
+    // Priority 1: If LLM explicitly provided an assessment, use it (most reliable)
+    // The LLM's assessment takes precedence because it considers context and nuance
+    // (e.g., "confirmed: false" means NOT_MET even if cdl_class matches)
+    if (parseResult.assessment) {
+        console.log(`[RequirementEvaluator] Using LLM assessment: ${parseResult.assessment} (LLM assessment takes priority)`);
+        return parseResult.assessment as RequirementStatus;
     }
 
-    // Priority 2: If parsing failed but LLM provided an assessment, use it
-    if (parseResult.assessment) {
-        console.log(`[RequirementEvaluator] Using LLM assessment: ${parseResult.assessment} (parsing failed but assessment available)`);
-        return parseResult.assessment as RequirementStatus;
+    // Priority 2: If we successfully parsed a value, evaluate it against criteria
+    if (parseResult.success && parseResult.value) {
+        return evaluateRequirement(requirementType, criteria, parseResult.value);
     }
 
     // Priority 3: If we have a value but parsing was marked as failed, try to evaluate it anyway
@@ -136,6 +140,7 @@ const runCriteriaEvaluation = (
 
 /**
  * Evaluates criteria and updates the conversation requirement in the database.
+ * If requirement is NOT_MET, also updates conversation's screening_decision to DENIED.
  *
  * @param conversationId - The conversation ID
  * @param currentRequirement - The current requirement being evaluated
@@ -170,6 +175,15 @@ const evaluateAndUpdateRequirement = async (
         }
     );
 
+    // If requirement was NOT_MET and it's required, set conversation's screening_decision to DENIED
+    // (Note: This may have already been set in Priority 1 check, but we set it here too for safety
+    // in case evaluationResult is NOT_MET but parseResult.assessment wasn't set)
+    if (evaluationResult === RequirementStatus.NOT_MET && isRequiredCriteria(currentRequirement.criteria)) {
+        await deps.conversationRepo.update(conversationId, {
+            screening_decision: ScreeningDecision.DENIED,
+        });
+    }
+
     return {
         evaluationResult,
         needsClarification: false,
@@ -179,6 +193,7 @@ const evaluateAndUpdateRequirement = async (
 
 /**
  * Handles follow-up clarification logic: checks threshold and returns appropriate result.
+ * If threshold exceeded and marked as NOT_MET, also sets conversation's screening_decision to DENIED.
  *
  * @param conversationId - The conversation ID
  * @param currentRequirement - The current requirement being evaluated
@@ -217,6 +232,13 @@ const handleFollowUpClarification = async (
             }
         );
 
+        // Set conversation's screening_decision to DENIED only if requirement is required
+        if (isRequiredCriteria(currentRequirement.criteria)) {
+            await deps.conversationRepo.update(conversationId, {
+                screening_decision: ScreeningDecision.DENIED,
+            });
+        }
+
         return {
             evaluationResult: RequirementStatus.NOT_MET,
             needsClarification: false, // No more clarification needed - we're done
@@ -251,8 +273,29 @@ export const evaluateRequirementCriteria = async (
     assistantMessageId: string,
     deps: EvaluatorDependencies
 ): Promise<EvaluatorResult> => {
-    // Check if clarification is needed first (parser detected ambiguity)
-    if (parseResult.needsClarification) {
+    // Priority 1: If LLM explicitly says NOT_MET (even if needs_clarification is true),
+    // and it's a required requirement, we should NOT ask for clarification - end the conversation
+    // The LLM may set needs_clarification: true even when assessment is NOT_MET,
+    // but if the assessment is clear (NOT_MET), we should respect that
+    if (parseResult.assessment === RequirementStatus.NOT_MET && isRequiredCriteria(currentRequirement.criteria)) {
+        console.log(`[RequirementEvaluator] NOT_MET for required requirement ${currentRequirement.id} - setting DENIED immediately`);
+        // Set DENIED immediately when we detect NOT_MET for a required requirement
+        await deps.conversationRepo.update(conversationId, {
+            screening_decision: ScreeningDecision.DENIED,
+        });
+        // Evaluate and update to NOT_MET, which will trigger DONE status in state router
+        return await evaluateAndUpdateRequirement(
+            conversationId,
+            currentRequirement,
+            parseResult,
+            assistantMessageId,
+            deps
+        );
+    }
+
+    // Priority 2: Check if clarification is needed (parser detected ambiguity)
+    // Only ask for clarification if assessment is NOT NOT_MET (or if no assessment)
+    if (parseResult.needsClarification && parseResult.assessment !== RequirementStatus.NOT_MET) {
         return await handleFollowUpClarification(
             conversationId,
             currentRequirement,
@@ -261,7 +304,7 @@ export const evaluateRequirementCriteria = async (
         );
     }
 
-    // Try to evaluate criteria
+    // Priority 3: Try to evaluate criteria
     const evaluationResult = await evaluateAndUpdateRequirement(
         conversationId,
         currentRequirement,
@@ -270,7 +313,7 @@ export const evaluateRequirementCriteria = async (
         deps
     );
 
-    // If we couldn't evaluate (no value, no assessment), that's also a follow-up case
+    // Priority 4: If we couldn't evaluate (no value, no assessment), that's also a follow-up case
     // The LLM is confused and needs more information (e.g., "I maybe have it")
     if (evaluationResult.evaluationResult === null) {
         return await handleFollowUpClarification(

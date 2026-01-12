@@ -75,9 +75,10 @@ export class CompletionHandler {
     // 3. Build conversation context for DONE status
     const { context } = await buildDoneContext(conversationId, contextBuilderDeps);
 
-    // 4. Process completion message with LLM
+    // 4. Process completion message with LLM (or generate rejection if DENIED)
     const { completionMessage } = await processCompletionMessage(
       context,
+      conversation.screening_decision,
       streamOptions,
       completionProcessorDeps
     );

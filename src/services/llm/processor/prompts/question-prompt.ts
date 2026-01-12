@@ -8,6 +8,7 @@ import {buildJobFactsSystemPromptMessage} from "./message-builders/job-facts";
 import {buildCompletionSystemPromptMessage} from "./message-builders/complete";
 import {buildRequirementSystemMessage} from "./message-builders/requirements";
 import { buildPendingGreetingSystemPromptMessage } from '../../greeting/prompt-builder';
+import {ScreeningDecision} from '../../../../entities';
 
 type PromptFunction = (context: ConversationContext) => ChatMessage[];
 
@@ -88,10 +89,13 @@ const buildJobFactsSystemMessage = (
 };
 
 export const buildCompleteSystemPrompt = (
-    context: ConversationContext
+    context: ConversationContext,
+    screeningDecision?: ScreeningDecision
 ): ChatMessage[] => {
     // Combine context and completion message into one system message
-    const finalPromptMessage = buildCompletionSystemPromptMessage(context);
+    // Use DENIED as default if screening decision not provided (safer default)
+    const decision = screeningDecision ?? ScreeningDecision.DENIED;
+    const finalPromptMessage = buildCompletionSystemPromptMessage(context, decision);
     const combinedSystemMessage = `${finalPromptMessage}`;
     const systemPrompt = buildSystemMessage(combinedSystemMessage);
     // Don't include message_history - context summary is sufficient
