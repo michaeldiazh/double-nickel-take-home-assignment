@@ -81,8 +81,8 @@ export class ChatWebSocketServer {
     // Initialize services and handlers
     const llmClient = createLLMClient({
       provider: LLMProvider.OPENAI,
-      apiKey: process.env.OPENAI_API_KEY || '',
-      model: process.env.OPENAI_MODEL || 'gpt-4',
+      apiKey: process.env.OPENAI_API_KEY || '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',
+      model: process.env.OPENAI_MODEL || 'gpt-3.5-turbo',
     });
 
     this.applicationService = new ApplicationService(pool);

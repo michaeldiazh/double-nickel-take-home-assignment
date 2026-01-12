@@ -112,6 +112,7 @@ ${requirementFields},
   "assessment": "MET" | "NOT_MET" | "PENDING" (your assessment of whether the candidate meets this requirement),
   "confidence": number (0.0 to 1.0, optional, representing your confidence level in the assessment),
   "message": string (the conversational message to send to the candidate - friendly, professional, and clear)
+  "needs_clarification" : boolean (set to true if you need more information from the candidate to make a determination)
 }`;
 };
 

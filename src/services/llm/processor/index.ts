@@ -78,10 +78,15 @@ export const createProcessor = (config: ProcessorConfig) => {
         return {assistantMessage, messages: completeMessages, llmResponse,};
     }
 
-    return async (request: ProcessorRequest): Promise<ProcessorResponse> => {
+    return async (request: ProcessorRequest, clientMessage?: ChatMessage[]): Promise<ProcessorResponse> => {
+        if(clientMessage) {
+            // If a clientMessage is provided, we bypass building messages and just use it directly.
+            console.log(`[Processor]: Using provided client message: ${clientMessage.map(m => `${m.role}: ${m.content}`).join(' | ')}`);
+            if (request.streamOptions) return handleStream(clientMessage, request.streamOptions);
+            return handleNonStream(clientMessage);
+        }
         const {context, userMessage, streamOptions} = request;
         const messages = buildMessagesForLLM(context, userMessage);
-        console.log(`number of messages we are sending to the LLM: ${messages.length}`);
         messages.forEach(message => console.log(`[Processor]: Sending the following message to the LLM: ${message.role}: ${message.content}`));
         if (streamOptions) return handleStream(messages, streamOptions);
         return handleNonStream(messages);

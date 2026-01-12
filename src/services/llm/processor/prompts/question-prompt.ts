@@ -52,7 +52,7 @@ const buildRequirementSystemMessagePrompt = (
     return [systemPrompt];
 }
 
-const buildFollowUpRequirementPrompt = (
+export const buildFollowUpRequirementPrompt = (
     context: ConversationContext,
 ): ChatMessage[] => {
     if (!context.current_requirement) {
@@ -61,12 +61,8 @@ const buildFollowUpRequirementPrompt = (
     const requirementType = context.current_requirement.requirement_type;
     const clarificationNeeded = context.clarification_needed!;
     const {job_title} = context
-    // Combine context and follow-up message into one system message
-    const contextString = buildSystemContextMessage(context);
     const followUpMessage = buildRequirementFollowUpSystemPromptMessage(job_title, clarificationNeeded, requirementType);
-    const combinedSystemMessage = `${followUpMessage}`;
-    const systemPrompt = buildSystemMessage(combinedSystemMessage);
-    // Don't include message_history - context summary is sufficient
+    const systemPrompt = buildSystemMessage(followUpMessage);
     return [systemPrompt];
 }
 
