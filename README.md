@@ -1,3 +1,4 @@
+
 # Double Nickel Take Home Challenge - Backend
 
 Backend server for the Double Nickel recruiting assistant chatbot. Built with TypeScript, Express, WebSocket, and PostgreSQL.

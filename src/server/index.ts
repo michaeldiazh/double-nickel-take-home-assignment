@@ -20,6 +20,7 @@ import {
     handleJobQuestionsResponse,
     handleDoneConversation,
 } from '../services/sender/handler';
+import {ConversationContextService} from '../services/conversation-context/service';
 
 /**
  * WebSocket message types
@@ -66,6 +67,7 @@ export class ChatWebSocketServer {
     private completionHandler: CompletionHandler;
     private conversationRepo: ConversationRepository;
     private conversationJobRequirementRepo: ConversationJobRequirementRepository;
+    private conversationContextService: ConversationContextService;
 
     constructor(port: number = 3000) {
         // Initialize Express app
@@ -93,7 +95,7 @@ export class ChatWebSocketServer {
         this.completionHandler = new CompletionHandler(pool, llmClient);
         this.conversationRepo = new ConversationRepository(pool);
         this.conversationJobRequirementRepo = new ConversationJobRequirementRepository(pool);
-
+        this.conversationContextService = new ConversationContextService(pool);
         // Setup WebSocket connection handling
         this.wss.on('connection', (ws: WebSocket) => {
             this.handleConnection(ws);
@@ -180,7 +182,7 @@ export class ChatWebSocketServer {
         try {
             const result = await handleInitialConversation(ws, userId, jobId, {
                 applicationService: this.applicationService,
-                greetingInitialHandler: this.greetingInitialHandler,
+                greetingInitialHandler: this.greetingInitialHandler
             });
 
             // Send status update after greeting completes
@@ -278,15 +280,6 @@ export class ChatWebSocketServer {
                     status: result.newStatus,
                 });
 
-                // Send conversation end if status is DONE
-                if (result.newStatus === ConversationStatus.DONE) {
-                    this.sendMessage(ws, {
-                        type: 'conversation_end',
-                        conversationId,
-                        message: result.message,
-                        status: ConversationStatus.DONE,
-                    });
-                }
             }
         } catch (error) {
             console.error('Error in handleSendMessage:', error);

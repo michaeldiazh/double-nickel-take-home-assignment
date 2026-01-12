@@ -7,6 +7,7 @@ import {buildSystemContextMessage} from "./message-builders/context";
 import {buildJobFactsSystemPromptMessage} from "./message-builders/job-facts";
 import {buildCompletionSystemPromptMessage} from "./message-builders/complete";
 import {buildRequirementSystemMessage} from "./message-builders/requirements";
+import { buildPendingGreetingSystemPromptMessage } from '../../greeting/prompt-builder';
 
 type PromptFunction = (context: ConversationContext) => ChatMessage[];
 
@@ -23,6 +24,13 @@ export const getRequirementDescription = (
     requirementType: string
 ): string => {
     return requirementDescription || requirementType.toLowerCase().replace(/_/g, ' ');
+};
+
+export const buildPendingGreetingPrompt = (
+    context: ConversationContext
+): ChatMessage[] => {
+    const systemPrompt = buildPendingGreetingSystemPromptMessage(context);
+    return [buildSystemMessage(systemPrompt)];
 };
 
 /**
@@ -79,13 +87,12 @@ const buildJobFactsSystemMessage = (
     return [systemPrompt];
 };
 
-const buildCompleteSystemPrompt = (
+export const buildCompleteSystemPrompt = (
     context: ConversationContext
 ): ChatMessage[] => {
     // Combine context and completion message into one system message
-    const contextString = buildSystemContextMessage(context);
     const finalPromptMessage = buildCompletionSystemPromptMessage(context);
-    const combinedSystemMessage = `${contextString}\n\n${finalPromptMessage}`;
+    const combinedSystemMessage = `${finalPromptMessage}`;
     const systemPrompt = buildSystemMessage(combinedSystemMessage);
     // Don't include message_history - context summary is sufficient
     return [systemPrompt];

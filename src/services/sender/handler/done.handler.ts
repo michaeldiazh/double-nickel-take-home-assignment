@@ -28,16 +28,6 @@ export const handleDoneConversation = async (
     undefined // Don't stream - we'll send the complete message at once
   );
 
-  // Send the complete message as a single message (not token by token)
-  const streamOptionsBuilder = buildStreamOptionsForActiveStream(ws);
-  const streamOptions = streamOptionsBuilder(conversationId, ServerStreamEvent.CONVERSATION_END);
-  
-  // Send the complete message all at once
-  if (streamOptions && completionMessage) {
-    streamOptions.onChunk(completionMessage);
-    streamOptions.onComplete?.();
-  }
-
   return {
     newStatus: ConversationStatus.DONE,
     message: completionMessage,
