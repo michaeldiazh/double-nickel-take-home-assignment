@@ -25,6 +25,47 @@ This document provides a comprehensive overview of the backend architecture for 
 
 The backend follows a **domain-driven architecture** with clear separation between business logic (domain) and infrastructure concerns.
 
+### Architecture Diagram
+
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        Frontend[React Frontend]
+        WS[WebSocket Client]
+    end
+
+    subgraph "Infrastructure Layer"
+        Server[HTTP/WebSocket Server]
+        Processor[LLM Processor]
+        DB[(PostgreSQL)]
+    end
+
+    subgraph "Domain Layer - Business Logic"
+        Prompts[Prompts Domain<br/>Status Handlers]
+        LLM[LLM Domain<br/>Greeting/Requirement/Completion]
+        Criteria[Criteria Domain<br/>Evaluation & Parsing]
+        Context[Conversation Context<br/>Service]
+        AppService[Application Service]
+    end
+
+    subgraph "Entity Layer - Data Access"
+        Repos[Repositories<br/>User/Job/Conversation/etc.]
+    end
+
+    Frontend -->|HTTP REST| Server
+    WS -->|WebSocket| Server
+    Server -->|Routes Messages| Prompts
+    Prompts -->|Orchestrates| LLM
+    LLM -->|Uses| Processor
+    LLM -->|Evaluates| Criteria
+    LLM -->|Builds Context| Context
+    Prompts -->|Queries| AppService
+    LLM -->|Queries| Repos
+    AppService -->|Queries| Repos
+    Repos -->|SQL| DB
+    Processor -->|LLM API| LLM_API[OpenAI API]
+```
+
 ### Directory Structure
 
 ```
@@ -785,13 +826,55 @@ OPENAI_API_KEY=your_api_key
 
 ### Prerequisites
 
-1. PostgreSQL database running
-2. Database schema created (run `misc/output_schema.sql`)
+1. Node.js (v18 or higher)
+2. PostgreSQL database (or use Docker Compose)
 3. Environment variables configured
+
+### Quick Start with Docker Compose
+
+The easiest way to get started is using Docker Compose for the database:
+
+```bash
+# Start PostgreSQL database
+docker-compose up -d
+
+# The database will be automatically initialized with the schema and mock data
+# Connection details:
+#   Host: localhost
+#   Port: 5432
+#   Database: happy_hauler
+#   User: postgres
+#   Password: postgres
+```
+
+Then create a `.env` file in the backend directory:
+
+```env
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=happy_hauler
+DB_USER=postgres
+DB_PASSWORD=postgres
+PORT=3000
+OPENAI_API_KEY=your_api_key_here
+OPENAI_MODEL=gpt-4o-mini
+```
+
+### Manual Setup
+
+If you prefer to set up PostgreSQL manually:
+
+1. Install and start PostgreSQL
+2. Create the database: `createdb happy_hauler`
+3. Run the schema: `psql -d happy_hauler -f misc/output_schema.sql`
+4. (Optional) Load mock data: `psql -d happy_hauler -f misc/mock_data.sql`
 
 ### Start Commands
 
 ```bash
+# Install dependencies
+npm install
+
 # Development (with hot reload)
 npm run dev
 
@@ -873,6 +956,321 @@ Run tests:
 ```bash
 npm test
 ```
+
+---
+
+---
+
+## Design Decisions & Trade-offs
+
+This section documents the key architectural and design decisions made during development, along with the rationale and trade-offs considered.
+
+### 1. Domain-Driven Design (DDD) Architecture
+
+**Decision**: Refactored from a service-oriented to a domain-driven architecture with clear separation between business logic (domain) and infrastructure concerns.
+
+**Rationale**:
+- **Business Logic Isolation**: All domain logic lives in `domain/`, making it easy to understand, test, and maintain
+- **Infrastructure Independence**: Domain layer has no dependencies on Express, WebSocket, or database implementations
+- **Testability**: Pure business logic can be tested without mocking infrastructure
+- **Scalability**: Clear boundaries make it easier to add features or swap implementations
+
+**Trade-offs**:
+- ✅ **Pros**: Better separation of concerns, easier testing, clearer code organization
+- ⚠️ **Cons**: More files and directories, slightly more verbose imports
+
+**Implementation**:
+```
+domain/          # Business logic (no infrastructure dependencies)
+entities/        # Data access (repository pattern)
+processor/       # Infrastructure (orchestration)
+server/          # Infrastructure (HTTP/WebSocket)
+```
+
+---
+
+### 2. Functional Composition over Object-Oriented Programming
+
+**Decision**: Handlers and services are implemented as functions with explicit dependencies, rather than classes with methods.
+
+**Rationale**:
+- **Modularity**: Functions are inherently modular - each function is a self-contained unit. If we used classes, we'd end up treating them as functions anyway (one method per class, no shared state), so why add the abstraction?
+- **Explicit Dependencies**: Dependencies are passed as parameters, making them obvious and easy to mock
+- **No Hidden State**: Functions are pure or have explicit side effects
+- **Easy Testing**: No need to mock class instances or deal with constructor injection
+- **Composability**: Functions can be easily composed and reused
+
+**Example**:
+```typescript
+// Functional approach (chosen)
+export const handleInitialConversation = async (
+  ws: WebSocket,
+  userId: string,
+  jobId: string,
+  deps: InitialHandlerDependencies
+): Promise<InitialHandlerResult> => { ... }
+
+// vs OOP approach (not chosen)
+class InitialHandler {
+  constructor(private deps: Dependencies) {}
+  async handle(ws: WebSocket, userId: string, jobId: string) { ... }
+}
+```
+
+**Trade-offs**:
+- ✅ **Pros**: Simpler, more testable, explicit dependencies, true modularity without unnecessary abstraction
+- ⚠️ **Cons**: No inheritance, more parameter passing
+- **Verdict**: Functional approach provides true modularity - classes would just become function wrappers, so we use functions directly
+
+---
+
+### 3. Repository Pattern for Data Access
+
+**Decision**: All database operations go through repository interfaces, keeping domain logic separate from SQL.
+
+**Rationale**:
+- **Abstraction**: Domain layer doesn't know about PostgreSQL, SQL, or connection pools
+- **Testability**: Easy to mock repositories for unit tests
+- **Flexibility**: Can swap database implementations without changing domain code
+- **Single Responsibility**: Repositories only handle data access, nothing else
+
+**Trade-offs**:
+- ✅ **Pros**: Clean separation, easy to test, database-agnostic domain
+- ⚠️ **Cons**: More abstraction layers, slightly more code
+- **Verdict**: Essential for maintaining clean architecture boundaries
+
+---
+
+### 4. Status Handler Pattern for Conversation Flow
+
+**Decision**: Conversation state transitions are handled by dedicated status handlers (`initial.status.handler.ts`, `pending.status.handler.ts`, etc.).
+
+**Rationale**:
+- **Single Responsibility**: Each handler manages one conversation state
+- **Extensibility**: Easy to add new conversation states by adding new handlers
+- **Clarity**: Code flow is obvious - status determines which handler runs
+- **Testability**: Each handler can be tested in isolation
+- **Stateless Design**: Handlers are stateless functions - all state comes from database queries via repositories, not from instance variables. The gateway pattern routes events to handlers based on conversation status, enabling true statelessness:
+  - **Scalability**: Any instance can handle any request (horizontal scaling)
+  - **Reliability**: No risk of state corruption or memory leaks
+  - **Concurrency**: Multiple requests handled simultaneously without state conflicts
+  - **Simplicity**: No state lifecycle management needed
+
+**Trade-offs**:
+- ✅ **Pros**: Clear state management, easy to extend, testable
+- ⚠️ **Cons**: More files, need to coordinate between handlers
+- **Verdict**: Pattern scales well and makes the codebase maintainable
+
+---
+
+### 5. Prompt Builder Separation
+
+**Decision**: Prompt building logic are in `domain/prompts/builders`, consolidating all prompt construction in one place.
+
+**Rationale**:
+- **Centralization**: All prompt logic in one domain area
+- **Reusability**: Prompt builders can be used by multiple handlers
+- **Testability**: Prompt building can be tested independently of LLM calls
+- **Maintainability**: Changes to prompts don't require changes to infrastructure
+
+**Trade-offs**:
+- ✅ **Pros**: Better organization, reusable components, easier to maintain
+- ⚠️ **Cons**: Initial refactoring effort
+- **Verdict**: Significantly improved code organization
+
+---
+
+### 6. LLM Client Abstraction
+
+**Decision**: Created `LLMClient` interface that abstracts provider-specific details (OpenAI, Gemini, etc.).
+
+**Rationale**:
+- **Provider Agnostic**: Can swap LLM providers without changing business logic
+- **Testability**: Easy to mock LLM calls for testing
+- **Flexibility**: Can add new providers (Claude, local models) easily
+- **Consistency**: All LLM interactions use the same interface
+
+**Implementation**:
+```typescript
+interface LLMClient {
+  model: string;
+  sendMessage(messages: ChatMessage[]): Promise<LLMResponse>;
+  streamMessage(messages: ChatMessage[], options: StreamOptions): Promise<void>;
+}
+```
+
+**Trade-offs**:
+- ✅ **Pros**: Future-proof, testable, flexible
+- ⚠️ **Cons**: Abstraction overhead (minimal)
+- **Verdict**: Essential for maintainability and testing
+
+NOTE: Currently this is using Chat GPT; however, we can expierment with Gemini later down the line
+
+---
+
+### 7. WebSocket for Real-time Communication
+
+**Decision**: Used WebSocket instead of HTTP polling for chat functionality.
+
+**Rationale**:
+- **Real-time**: Instant message delivery, no polling delays
+- **Efficiency**: Lower overhead than repeated HTTP requests
+- **User Experience**: Smooth, chat-like interface
+- **Streaming**: Supports streaming LLM responses token-by-token
+
+**Trade-offs**:
+- ✅ **Pros**: Better UX, efficient, supports streaming
+- ⚠️ **Cons**: More complex than REST, need connection management
+- **Verdict**: Essential for chat application UX
+
+---
+
+### 8. PostgreSQL with JSONB for Criteria Storage
+
+**Decision**: Store job requirement criteria as JSONB in PostgreSQL rather than normalized tables.
+
+**Rationale**:
+- **Flexibility**: Different requirement types have different structures (age, CDL class, endorsements, etc.)
+- **Schema Evolution**: Can add new criteria types without migrations
+- **Query Performance**: PostgreSQL JSONB is indexed and queryable
+- **Simplicity**: One table for all requirement types
+
+**Example**:
+```sql
+criteria JSONB  -- Stores: { "required": true, "min_age": 21 } or { "required": true, "classes": ["A", "B"] }
+```
+
+**Trade-offs**:
+- ✅ **Pros**: Flexible, no migrations for new types, good performance
+- ⚠️ **Cons**: Less type safety at DB level, need application-level validation
+- **Mitigation**: Zod schemas provide type safety and validation
+- **Verdict**: Best fit for rapidly evolving requirement types
+
+---
+
+### 9. TypeScript + Zod for Type Safety
+
+**Decision**: Use TypeScript for compile-time types and Zod for runtime validation.
+
+**Rationale**:
+- **Compile-time Safety**: TypeScript catches errors before runtime
+- **Runtime Validation**: Zod validates data at API boundaries and database boundaries
+- **Single Source of Truth**: Zod schemas generate TypeScript types
+- **API Safety**: Request/response validation prevents invalid data
+
+**Trade-offs**:
+- ✅ **Pros**: Type safety, runtime validation, better DX
+- ⚠️ **Cons**: Slight performance overhead for validation (negligible)
+- **Verdict**: Essential for production applications
+
+
+
+### 10. Processor at Root Level
+
+**Decision**: Moved `processor/` from `services/llm/processor/` to `src/processor/` at the root level.
+
+**Rationale**:
+- **Infrastructure Concern**: Processor is infrastructure (orchestration), not business logic
+- **Clear Separation**: Domain logic in `domain/`, infrastructure at root
+- **Independence**: Processor doesn't belong to LLM domain - it orchestrates multiple domains
+
+**Trade-offs**:
+- ✅ **Pros**: Better reflects architecture, clearer separation
+- ⚠️ **Cons**: Breaking change (resolved during refactor)
+- **Verdict**: Aligns with DDD principles
+
+---
+
+### 11. ConversationContext in Domain Layer
+
+**Decision**: Moved `ConversationContext` type from `services/conversation-context/types.ts` to `domain/prompts/builders/types.ts`.
+
+**Rationale**:
+- **Domain Type**: `ConversationContext` represents business logic state, not infrastructure
+- **Co-location**: Used primarily by prompt builders in domain
+- **Ownership**: Domain layer owns its types
+
+**Trade-offs**:
+- ✅ **Pros**: Types live with their usage, domain owns its concepts
+- ⚠️ **Cons**: Need to import from domain (appropriate)
+- **Verdict**: Correct placement per DDD
+
+---
+
+### 12. Criteria Layer Extensibility
+
+**Decision**: Criteria system uses a modular structure where each requirement type (age, CDL class, etc.) has its own handler, parser, and types.
+
+**Rationale**:
+- **Easy Extension**: Adding a new requirement type requires only adding a new directory
+- **Isolation**: Each criteria type is self-contained
+- **Router Pattern**: Central router dispatches to appropriate handler
+- **Type Safety**: Each type has its own Zod schema
+
+**Structure**:
+```
+criteria/
+├── age-requirement/
+│   ├── handler.ts
+│   ├── parser.ts
+│   ├── types.ts
+│   └── index.ts
+├── cdl-class/
+│   └── ...
+└── router.ts  # Dispatches to appropriate handler
+```
+
+**Trade-offs**:
+- ✅ **Pros**: Highly extensible, isolated, type-safe
+- ⚠️ **Cons**: More files, need to register new types in router
+- **Verdict**: Scales well for many requirement types
+
+---
+
+### 13. Testing Structure Mirrors Source
+
+**Decision**: Test directory structure mirrors source structure (`tests/domain/`, `tests/entities/`, `tests/server/`).
+
+**Rationale**:
+- **Discoverability**: Easy to find tests for any file
+- **Organization**: Tests grouped by architectural layer
+- **Maintainability**: Clear where new tests should go
+
+**Trade-offs**:
+- ✅ **Pros**: Intuitive, organized, scalable
+- ⚠️ **Cons**: None significant
+- **Verdict**: Standard best practice
+
+---
+
+### 14. No Authentication (Out of Scope)
+
+**Decision**: Authentication is explicitly out of scope for this challenge.
+
+**Rationale**:
+- **Scope Management**: Focus on core functionality (screening flow)
+- **Time Constraints**: Authentication adds significant complexity
+- **Test IDs**: Using hardcoded test user/job IDs for development
+
+**Trade-offs**:
+- ✅ **Pros**: Faster development, focus on core features
+- ⚠️ **Cons**: Not production-ready, need auth for real use
+- **Future**: Would implement JWT or session-based auth
+
+---
+
+## Summary of Key Trade-offs
+
+| Decision | Primary Benefit | Trade-off |
+|----------|----------------|-----------|
+| DDD Architecture | Business logic isolation | More files/directories |
+| Functional Composition | Explicit dependencies, testability | No inheritance patterns |
+| Repository Pattern | Database abstraction | Additional abstraction layer |
+| Status Handlers | Clear state management | More coordination needed |
+| WebSocket | Real-time UX | More complex than REST |
+| JSONB Criteria | Schema flexibility | Less DB-level type safety |
+| TypeScript + Zod | Type safety + validation | Slight performance overhead |
+| Processor at Root | Clear infrastructure separation | Breaking change during refactor |
 
 ---
 

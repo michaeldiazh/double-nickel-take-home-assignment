@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { Pool } from 'pg';
 import { z } from 'zod';
 import { ApplicationRepository } from '../../entities/application/repository';
+import {ConversationRepository} from "../../entities";
 
 /**
  * Create application routes
@@ -9,7 +10,15 @@ import { ApplicationRepository } from '../../entities/application/repository';
 export const createApplicationRoutes = (pool: Pool): Router => {
   const router = Router();
   const applicationRepo = new ApplicationRepository(pool);
+  const conversationRepo = new ConversationRepository(pool)
+  router.get('/applications/:applicationId/conversation', async (req: Request, res: Response) => {
+      const conversation = await conversationRepo.getByApplicationId(req.params.applicationId);
+        if (!conversation) {
+            return res.status(404).json({ error: 'Conversation not found' });
+        }
 
+        return  res.status(200).json(conversation);
+  });
   /**
    * DELETE /application/:applicationId - Delete an application
    * This will cascade delete the conversation and all related data.

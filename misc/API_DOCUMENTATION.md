@@ -153,7 +153,57 @@ curl -X POST http://localhost:3000/user/login \
 
 ---
 
-### 3. Get All Jobs
+### 3. Get User by ID
+
+Retrieve a user's profile with their job applications by user ID.
+
+**Endpoint:** `GET /user/:userId`
+
+**Path Parameters:**
+- `userId` (UUID v4) - The user ID
+
+**Response:** `200 OK`
+```json
+{
+  "id": "123e4567-e89b-4d3a-a456-426614174000",
+  "firstName": "John",
+  "lastName": "Doe",
+  "email": "user@example.com",
+  "address": "123 Main St",
+  "aptNum": "Apt 4B",
+  "state": "CA",
+  "zipCode": "90210",
+  "jobApplications": [
+    {
+      "applicationId": "123e4567-e89b-4d3a-a456-426614174001",
+      "jobId": "123e4567-e89b-4d3a-a456-426614174002",
+      "jobName": "Truck Driver",
+      "jobDescription": "Long-haul truck driver position",
+      "jobLocation": "Los Angeles, CA",
+      "screeningDecision": "Pending"
+    }
+  ]
+}
+```
+
+**Screening Decision Values:**
+- `"Approved"` - Application approved
+- `"Denied"` - Application denied
+- `"Pending"` - Application pending review
+- `"Canceled"` - Application canceled by user
+
+**Error Responses:**
+- `404 Not Found` - User not found
+- `500 Internal Server Error` - Server error
+
+**Example:**
+```bash
+curl -X GET http://localhost:3000/user/123e4567-e89b-4d3a-a456-426614174000
+```
+
+---
+
+### 4. Get All Jobs
 
 Retrieve all available jobs, ordered by creation date (oldest first).
 
@@ -191,7 +241,54 @@ curl -X GET http://localhost:3000/jobs
 
 ---
 
-### 4. Delete Application
+### 5. Get Conversation by Application ID
+
+Retrieve conversation details for a specific application.
+
+**Endpoint:** `GET /applications/:applicationId/conversation`
+
+**Path Parameters:**
+- `applicationId` (UUID v4) - The application ID
+
+**Response:** `200 OK`
+```json
+{
+  "id": "123e4567-e89b-4d3a-a456-426614174003",
+  "application_id": "123e4567-e89b-4d3a-a456-426614174001",
+  "is_active": true,
+  "conversation_status": "DONE",
+  "screening_decision": "APPROVED",
+  "screening_summary": "Candidate meets all requirements. Approved for position.",
+  "created_at": "2024-01-15T10:30:00.000Z",
+  "updated_at": "2024-01-15T10:45:00.000Z"
+}
+```
+
+**Conversation Status Values:**
+- `"PENDING"` - Initial state, waiting for user response to greeting
+- `"START"` - Conversation started, requirements being introduced
+- `"ON_REQ"` - Collecting requirement responses
+- `"ON_JOB_QUESTIONS"` - Asking job-specific questions
+- `"DONE"` - Conversation completed
+
+**Screening Decision Values:**
+- `"APPROVED"` - Application approved
+- `"DENIED"` - Application denied
+- `"PENDING"` - Application pending review
+- `"USER_CANCELED"` - Application canceled by user
+
+**Error Responses:**
+- `404 Not Found` - Conversation not found for this application
+- `500 Internal Server Error` - Server error
+
+**Example:**
+```bash
+curl -X GET http://localhost:3000/applications/123e4567-e89b-4d3a-a456-426614174001/conversation
+```
+
+---
+
+### 6. Delete Application
 
 Delete an application and all associated data (conversation, messages, etc.). This is useful for allowing users to redo an application.
 
@@ -225,7 +322,7 @@ curl -X DELETE http://localhost:3000/application/123e4567-e89b-4d3a-a456-4266141
 
 ---
 
-### 5. Download Conversation Messages
+### 7. Download Conversation Messages
 
 Download all messages from a conversation as a text file.
 

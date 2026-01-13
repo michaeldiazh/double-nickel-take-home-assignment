@@ -6,7 +6,7 @@ import { ConversationContext } from '../../../domain/prompts/builders/types';
  * Maximum length for screening summary (in characters).
  * PostgreSQL TEXT can be very large, but we set a practical limit for UI/API purposes.
  */
-const MAX_SUMMARY_LENGTH = 10000; // 10,000 characters should be sufficient for most summaries
+const MAX_SUMMARY_LENGTH = 300; // 10,000 characters should be sufficient for most summaries
 
 /**
  * Dependencies for truncating/condensing summary.
