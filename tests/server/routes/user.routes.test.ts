@@ -9,7 +9,7 @@
 import { Request, Response } from 'express';
 import { Pool } from 'pg';
 import { UserRepository } from '../../../src/entities/user/repository';
-import { ApplicationService } from '../../../src/services/application/service';
+import { ApplicationService } from '../../../src/domain/application';
 import { ScreeningDecision } from '../../../src/entities';
 import { createUserRequestSchema, loginRequestSchema } from '../../../src/server/routes/user.routes';
 

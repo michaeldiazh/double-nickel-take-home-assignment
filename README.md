@@ -1,85 +1,124 @@
 # Backend Architecture Documentation
 
-This document provides a comprehensive overview of the backend architecture for the Double Nickel Take Home Challenge, covering the criteria layer, database layer, handlers, WebSocket implementation, and frontend endpoints.
+This document provides a comprehensive overview of the backend architecture for the Double Nickel Take Home Challenge, covering the domain-driven design, criteria layer, database layer, handlers, WebSocket implementation, and frontend endpoints.
 
 ## Table of Contents
 
-1. [Criteria Layer](#criteria-layer)
-2. [Database Layer](#database-layer)
-3. [Handlers](#handlers)
-   - [Prompting Handlers](#prompting-handlers)
-   - [Response Handling Handlers](#response-handling-handlers)
-4. [WebSocket Implementation](#websocket-implementation)
-5. [Frontend Endpoints](#frontend-endpoints)
+1. [Architecture Overview](#architecture-overview)
+2. [Domain Layer](#domain-layer)
+   - [Criteria Layer](#criteria-layer)
+   - [LLM Layer](#llm-layer)
+   - [Application Domain](#application-domain)
+   - [Prompts Domain](#prompts-domain)
+   - [Conversation Context](#conversation-context)
+3. [Database Layer](#database-layer)
+4. [Infrastructure Layer](#infrastructure-layer)
+   - [Processor](#processor)
+   - [Server](#server)
+   - [Database Connection](#database-connection)
+5. [WebSocket Implementation](#websocket-implementation)
+6. [Frontend Endpoints](#frontend-endpoints)
 
 ---
 
-## Criteria Layer
+## Architecture Overview
+
+The backend follows a **domain-driven architecture** with clear separation between business logic (domain) and infrastructure concerns.
+
+### Directory Structure
+
+```
+src/
+├── domain/                    # Business Logic (Domain Layer)
+│   ├── application/           # Application service
+│   ├── conversation-context/  # Conversation context building
+│   ├── criteria/              # Job requirement criteria system
+│   ├── llm/                   # LLM interaction handlers
+│   └── prompts/               # Prompt building and status handlers
+├── entities/                  # Data Access Layer (Repository Pattern)
+│   ├── application/
+│   ├── conversation/
+│   ├── job/
+│   ├── message/
+│   └── ...
+├── processor/                 # LLM Processing Orchestration (Infrastructure)
+├── server/                    # HTTP/WebSocket Server (Infrastructure)
+└── database/                  # Database Connection Pool (Infrastructure)
+```
+
+### Architecture Principles
+
+- **Domain Layer** (`domain/`): Contains all business logic, domain models, and use cases
+- **Entity Layer** (`entities/`): Data access layer using repository pattern
+- **Infrastructure Layer** (`processor/`, `server/`, `database/`): Technical concerns and external integrations
+- **Separation of Concerns**: Clear boundaries between business logic and infrastructure
+- **Functional Composition**: Handlers are functional, explicit dependencies, easy to test
+
+---
+
+## Domain Layer
+
+### Criteria Layer
 
 The criteria layer is responsible for defining, parsing, and evaluating job requirements. It provides a type-safe, extensible system for handling different types of job requirements.
 
-### Structure
+#### Structure
 
 ```
-src/services/criteria/
-├── criteria-types.ts          # Type definitions and Zod schemas for all requirement types
-├── handlers/                  # Evaluation handlers for each requirement type
-│   ├── router.ts             # Routes requirement types to appropriate handlers
-│   ├── cdl-class-handler.ts
-│   ├── years-experience-handler.ts
-│   ├── driving-record-handler.ts
-│   ├── endorsements-handler.ts
-│   ├── age-requirement-handler.ts
-│   ├── physical-exam-handler.ts
-│   ├── drug-test-handler.ts
-│   ├── background-check-handler.ts
-│   └── geographic-restriction-handler.ts
-├── parser/                    # Text parsing utilities for extracting values from user responses
-│   ├── cdl-class/
-│   ├── years-experience/
-│   ├── driving-record/
-│   └── ... (one per requirement type)
-├── requirement-status.ts     # Status management utilities
-└── response-format.ts        # Response formatting utilities
+src/domain/criteria/
+├── base-schemas.ts            # Base schemas (no dependencies, prevents circular deps)
+├── types.ts                   # Union types and re-exports
+├── parser.ts                  # Main parser router
+├── router.ts                  # Evaluation router
+├── requirement-status.ts      # Status management
+├── response-format.ts         # Response formatting
+├── utils.ts                   # Utility functions
+└── <requirement-type>/        # One directory per requirement type
+    ├── types.ts               # Type definitions and Zod schemas
+    ├── handler.ts             # Evaluation handler
+    ├── parser.ts              # Value extraction parser
+    └── index.ts               # Exports
 ```
 
-### Key Components
+#### Requirement Types
 
-#### 1. Requirement Types (`criteria-types.ts`)
+Each requirement type has its own directory with:
+- **`types.ts`**: Zod schemas, TypeScript types, and type guards
+- **`handler.ts`**: Evaluation logic (checks if user meets requirement)
+- **`parser.ts`**: Extraction logic (parses user response to structured value)
+- **`index.ts`**: Public exports
 
-Defines all supported job requirement types and their criteria schemas:
+**Supported Requirement Types**:
+- `cdl-class/` - Commercial Driver's License class (A, B, C)
+- `years-experience/` - Minimum years of driving experience
+- `driving-record/` - Maximum violations and accidents allowed
+- `endorsements/` - Required endorsements (Hazmat, Tanker, etc.)
+- `age-requirement/` - Minimum age requirement
+- `physical-exam/` - DOT physical exam requirements
+- `drug-test/` - Drug testing requirements
+- `background-check/` - Background check requirements
+- `geographic-restriction/` - Geographic restrictions (states, regions)
 
-- **CDL_CLASS**: Commercial Driver's License class (A, B, C)
-- **YEARS_EXPERIENCE**: Minimum years of driving experience
-- **DRIVING_RECORD**: Maximum violations and accidents allowed
-- **ENDORSEMENTS**: Required endorsements (Hazmat, Tanker, etc.)
-- **AGE_REQUIREMENT**: Minimum age requirement
-- **PHYSICAL_EXAM**: DOT physical exam requirements
-- **DRUG_TEST**: Drug testing requirements
-- **BACKGROUND_CHECK**: Background check requirements
-- **GEOGRAPHIC_RESTRICTION**: Geographic restrictions (states, regions)
+#### Base Schemas
 
-Each requirement type has:
-- A Zod schema for validation (`cdlClassCriteriaSchema`, etc.)
-- A TypeScript type (`CDLClassCriteria`, etc.)
-- Base schemas: `requiredCriteriaSchema` (required field mandatory) and `optionalRequiredCriteriaSchema` (required field optional)
+The `base-schemas.ts` file contains foundational schemas used by all requirement types:
 
-#### 2. Evaluation Handlers (`handlers/`)
+- **`requiredCriteriaSchema`**: For criteria with a mandatory `required` field
+- **`optionalRequiredCriteriaSchema`**: For criteria with an optional `required` field
 
-Each handler evaluates whether a user's response meets the requirement criteria:
+This file has **no imports** to prevent circular dependencies. All requirement type schemas extend from these base schemas.
 
-```typescript
-// Example: CDL Class Handler
-export const evaluateCDLClass = (
-  criteria: CDLClassCriteria,
-  value: ConversationRequirementValue
-): RequirementStatus => {
-  // Validates user's CDL class against job requirements
-  // Returns: MET, NOT_MET, or PENDING
-};
-```
+#### Key Components
 
-The router (`handlers/router.ts`) maps requirement types to their handlers using a type-safe record:
+**1. Type Definitions** (`types.ts`)
+
+- Union types: `JobRequirementCriteria`, `ConversationRequirementValue`
+- Enum: `JobRequirementType`
+- Re-exports all requirement-specific types and schemas
+
+**2. Evaluation Router** (`router.ts`)
+
+Routes requirement types to their evaluation handlers:
 
 ```typescript
 const criteriaRouter: CriteriaRouter = {
@@ -89,23 +128,181 @@ const criteriaRouter: CriteriaRouter = {
 };
 ```
 
-#### 3. Parsers (`parser/`)
+**3. Parser** (`parser.ts`)
+
+Main entry point for parsing LLM responses into structured values:
+
+```typescript
+parseLLMResponse(requirementType: JobRequirementType, content: string): ParseResult
+```
+
+**4. Handlers** (`<requirement-type>/handler.ts`)
+
+Each handler evaluates whether a user's response meets the requirement:
+
+```typescript
+export const evaluateCDLClass = (
+  criteria: CDLClassCriteria,
+  value: CDLClassValue
+): RequirementStatus => {
+  // Returns: MET, NOT_MET, or PENDING
+};
+```
+
+**5. Parsers** (`<requirement-type>/parser.ts`)
 
 Extract structured data from user's natural language responses:
 
-- **Text Extraction**: Converts free-form text to structured values
-- **Type-Specific Parsing**: Each requirement type has its own parser
-- **LLM-Assisted Parsing**: Uses LLM when simple keyword matching isn't sufficient
+```typescript
+export const parseCDLClassValue = (text: string): CDLClassValue => {
+  // Extracts CDL class from text
+};
+```
 
-Example: `cdl-class/extract-value-from-text.ts` extracts CDL class from user messages like "I have a Class A license".
+### LLM Layer
 
-### Usage Flow
+The LLM layer handles all interactions with language models, organized by conversation phase.
 
-1. **Requirement Definition**: Job requirements are stored in `job_requirements` table with `criteria` as JSONB
-2. **User Response**: User provides natural language response during conversation
-3. **Parsing**: Parser extracts structured value from user's text
-4. **Evaluation**: Handler evaluates extracted value against criteria
-5. **Status Update**: Conversation requirement status updated to MET, NOT_MET, or PENDING
+#### Structure
+
+```
+src/domain/llm/
+├── client/                     # LLM client abstraction
+│   ├── interface.ts            # LLMClient interface
+│   ├── factory.ts              # Client factory
+│   ├── types.ts                # Shared types
+│   └── providers/              # Provider implementations
+│       └── openai/             # OpenAI provider
+├── greeting/                   # Initial greeting phase
+│   ├── handler.ts              # Main greeting handler
+│   ├── initial-handler.ts      # Creates greeting message
+│   ├── response-handler.ts     # Handles yes/no response
+│   └── parser.ts               # Parses yes/no responses
+├── requirement/                # Requirement collection phase
+│   ├── requirement.handler.ts  # Main requirement handler
+│   ├── message-receiver.ts     # Receives and validates messages
+│   ├── llm-processor.ts        # LLM processing and parsing
+│   ├── evaluator.ts            # Criteria evaluation
+│   └── state-router.ts         # State management and routing
+├── completion/                 # Conversation completion phase
+│   ├── completion.handler.ts   # Main completion handler
+│   ├── context-builder.ts      # Builds completion context
+│   ├── completion-processor.ts # Generates completion message
+│   └── summary-truncator.ts    # Truncates long summaries
+└── job-questions/              # Job-specific questions phase
+    ├── handler.ts
+    ├── job-question-processor.ts
+    ├── message-receiver.ts
+    └── state-router.ts
+```
+
+#### Key Components
+
+**1. LLM Client** (`client/`)
+
+Abstracts LLM provider interactions:
+
+```typescript
+interface LLMClient {
+  chatCompletion(messages: ChatMessage[], options?: CompletionOptions): Promise<LLMResponse>;
+  streamChatCompletion(messages: ChatMessage[], options: StreamOptions): Promise<void>;
+}
+```
+
+**2. Functional Handlers**
+
+All handlers are functional with explicit dependencies:
+
+```typescript
+export const handleRequirementResponse = async (
+  conversationId: string,
+  userMessage: string,
+  streamOptions: StreamOptions | undefined,
+  deps: RequirementHandlerDependencies
+): Promise<RequirementHandlerResult>
+```
+
+**3. Phase-Specific Logic**
+
+Each conversation phase has dedicated handlers:
+- **Greeting**: Initial welcome and engagement
+- **Requirement**: Collecting and evaluating requirements
+- **Job Questions**: Job-specific questions
+- **Completion**: Final decision and summary generation
+
+### Application Domain
+
+Application service for managing job applications.
+
+```
+src/domain/application/
+├── service.ts                 # ApplicationService
+└── index.ts
+```
+
+**ApplicationService**:
+- Retrieves user's job applications with job and conversation data
+- Used by user endpoints to return application history
+
+### Prompts Domain
+
+Prompt building and conversation status management.
+
+#### Structure
+
+```
+src/domain/prompts/
+├── builders/                  # Prompt construction
+│   ├── prompt-context.ts     # Builds conversation context
+│   ├── question-prompt.ts    # Builds question prompts
+│   └── message-builders/      # Message type builders
+│       ├── greeting.ts
+│       ├── introduction.ts
+│       ├── requirements.ts
+│       ├── follow-up.ts
+│       ├── job-facts.ts
+│       └── complete.ts
+└── handlers/                  # Status transition handlers
+    ├── pending.status.handler.ts    # Handles PENDING status
+    ├── requirements.status.handler.ts # Handles ON_REQ status
+    ├── job-questions.status.handler.ts # Handles ON_JOB_QUESTIONS status
+    └── done.status.handler.ts        # Handles DONE status
+```
+
+#### Status Handlers
+
+Status handlers orchestrate conversation state transitions:
+
+- **`pending.status.handler.ts`**: Handles initial greeting and yes/no response
+- **`requirements.status.handler.ts`**: Handles requirement collection phase
+- **`job-questions.status.handler.ts`**: Handles job-specific questions
+- **`done.status.handler.ts`**: Handles conversation completion
+
+Each handler:
+1. Receives user message
+2. Calls appropriate LLM handler
+3. Updates conversation status
+4. Returns response message
+
+### Conversation Context
+
+Builds comprehensive conversation context for LLM interactions.
+
+```
+src/domain/conversation-context/
+├── service.ts                 # ConversationContextService
+├── types.ts                   # ConversationContext type
+└── index.ts
+```
+
+**ConversationContextService**:
+- Loads full conversation context including:
+  - User and job information
+  - Message history
+  - Current requirement
+  - Completed requirements
+  - Job facts
+- Used by all LLM handlers to provide context
 
 ---
 
@@ -119,13 +316,18 @@ The database layer follows a repository pattern with clear separation between en
 src/entities/
 ├── user/                      # User accounts
 ├── job/                       # Job postings
-├── application/               # Job applications
-├── conversation/              # Conversation sessions
-├── message/                   # Individual messages in conversations
-├── job-requirement/           # Job requirement definitions
-├── conversation-job-requirement/  # User's responses to requirements
+├── application/              # Job applications
+├── conversation/             # Conversation sessions
+├── message/                  # Individual messages
+├── job-requirement/          # Job requirement definitions
+├── conversation-job-requirement/ # User's responses to requirements
 └── job-fact/                 # Job-specific facts/context
 ```
+
+Each entity has:
+- **`domain.ts`**: Domain model and Zod schemas
+- **`repository.ts`**: Database access methods
+- **`index.ts`**: Public exports
 
 ### Key Entities
 
@@ -156,7 +358,7 @@ src/entities/
 #### 5. Message (`entities/message/`)
 - Individual messages in conversations
 - Repository: `MessageRepository`
-- Sender enum: `USER`, `ASSISTANT`, `SYSTEM`
+- Sender: `'USER'`, `'ASSISTANT'`, `'SYSTEM'` (string literals)
 - Methods: `create()`, `getByConversationId()`
 
 #### 6. Job Requirement (`entities/job-requirement/`)
@@ -186,122 +388,56 @@ See `misc/output_schema.sql` for complete schema definition.
 
 ---
 
-## Handlers
+## Infrastructure Layer
 
-Handlers orchestrate the conversation flow, managing prompts, LLM interactions, and state transitions.
+### Processor
 
-### Prompting Handlers
+The processor orchestrates LLM interactions, prompt building, and response handling.
 
-Handlers responsible for generating prompts and sending messages to users.
+```
+src/processor/
+├── index.ts                  # Processor factory and main logic
+└── types.ts                   # Processor types
+```
 
-#### 1. Greeting Initial Handler (`services/llm/greeting/initial-handler.ts`)
+**Processor**:
+- Builds conversation prompts from context
+- Handles streaming and non-streaming LLM calls
+- Processes LLM responses
+- Used by all LLM handlers
 
-**Purpose**: Generates the initial greeting message when a conversation starts.
+### Server
 
-**Flow**:
-1. Creates application and conversation (status: `PENDING`)
-2. Builds greeting prompt with job context
-3. Calls LLM to generate personalized greeting
-4. Saves greeting as assistant message
-5. Returns greeting text
+HTTP and WebSocket server implementation.
 
-**Key Methods**:
-- `handleInitialGreeting(applicationId, jobId)`: Generates and saves initial greeting
+```
+src/server/
+├── index.ts                  # ApplicationGateway (HTTP + WebSocket)
+├── types.ts                   # WebSocket types and schemas
+├── builder/
+│   └── stream-option.builder.ts # Stream options builder
+└── routes/                    # HTTP route handlers
+    ├── user.routes.ts
+    ├── job.routes.ts
+    ├── application.routes.ts
+    └── conversation-summary.routes.ts
+```
 
-#### 2. Greeting Response Handler (`services/llm/greeting/response-handler.ts`)
+**ApplicationGateway**:
+- Unified entry point for HTTP REST and WebSocket
+- Manages WebSocket connections
+- Routes messages to appropriate handlers based on conversation status
+- Handles early disconnects (auto-deletes incomplete applications)
 
-**Purpose**: Handles user's yes/no response to the initial greeting.
+### Database Connection
 
-**Flow**:
-1. Saves user's message
-2. Parses yes/no response (keyword matching or LLM-assisted)
-3. If "no": Updates conversation to `DENIED`, sends "good luck" message
-4. If "yes": 
-   - Creates top 3 conversation requirements (from job requirements)
-   - Generates requirement introduction message
-   - Updates conversation status to `START`
-   - Returns introduction message
+Database connection pool management.
 
-**Key Methods**:
-- `handleResponse(conversationId, userMessage)`: Processes yes/no response
-
-#### 3. Requirement Handler (`services/llm/requirement/handler.ts`)
-
-**Purpose**: Processes user responses during requirement collection phase (`ON_REQ` status).
-
-**Flow**:
-1. **Message Receiver**: Validates and saves user message
-2. **LLM Processor**: Processes message with LLM to extract structured data
-3. **Evaluator**: Evaluates extracted value against requirement criteria
-4. **State Router**: Determines next action based on evaluation result
-   - If MET/NOT_MET: Move to next requirement or complete requirements
-   - If PENDING: Ask follow-up question
-
-**Key Methods**:
-- `processRequirement(conversationId, userMessage)`: Main processing method
-
-**Sub-modules**:
-- `message-receiver.ts`: Receives and validates messages
-- `llm-processor.ts`: LLM processing and parsing
-- `evaluator.ts`: Criteria evaluation
-- `state-router.ts`: State management and routing
-
-#### 4. Job Questions Handler (`services/llm/job-questions/handler.ts`)
-
-**Purpose**: Handles job-specific questions after requirements are met.
-
-**Flow**:
-1. Processes user responses to job-specific questions
-2. Uses LLM to generate contextual questions
-3. Manages question flow and completion
-
-**Status**: `ON_JOB_QUESTIONS`
-
-#### 5. Completion Handler (`services/llm/completion/handler.ts`)
-
-**Purpose**: Generates final screening decision and summary.
-
-**Flow**:
-1. Evaluates all requirements
-2. Generates screening decision (APPROVED/DENIED)
-3. Creates screening summary
-4. Updates conversation to `DONE` status
-
-### Response Handling Handlers
-
-Handlers that process responses and manage state transitions.
-
-#### Sender Handlers (`services/sender/handler/`)
-
-Orchestrate message sending and state updates:
-
-- **`on-greeting.handler.ts`**: Handles initial greeting flow
-- **`on-requirements.handler.ts`**: Handles requirement collection flow
-- **`on-job-questions.handler.ts`**: Handles job questions flow
-- **`on-completion.handler.ts`**: Handles completion flow
-
-Each handler:
-1. Calls appropriate LLM handler
-2. Sends response to user via WebSocket
-3. Updates conversation status
-4. Manages state transitions
-
-### LLM Client (`services/llm/client/`)
-
-Abstracts LLM provider interactions:
-
-- **Interface**: `LLMClient` with methods for chat completion and streaming
-- **Factory**: `createLLMClient()` creates provider-specific clients
-- **Providers**: Currently supports OpenAI
-- **Streaming**: Supports real-time chunk delivery for WebSocket
-
-### Prompt Building (`services/llm/processor/prompts/`)
-
-Modular prompt construction:
-
-- **`message-builders/`**: Builds different message types (introduction, requirements, context, etc.)
-- **`prompt-context.ts`**: Builds conversation context for LLM
-- **`question-prompt.ts`**: Builds question prompts
+```
+src/database/
+├── connection.ts              # Connection pool setup
+└── index.ts
+```
 
 ---
 
@@ -356,38 +492,37 @@ The `ApplicationGateway` class (in `src/server/index.ts`) serves as a unified en
 ```typescript
 // Initial greeting
 {
-  type: 'greeting',
+  event: 'greeting',
   conversationId: string,
   message: string
 }
 
 // Regular message
 {
-  type: 'message',
+  event: 'message',
   conversationId: string,
   message: string
 }
 
-// Status update
+// Status update (includes completion data when done)
 {
-  type: 'status_update',
+  event: 'status_update',
   conversationId: string,
   status: ConversationStatus,
   message: string,
-  conversationComplete?: boolean,  // When status is DONE
   screeningDecision?: string,      // When conversation complete
   screeningSummary?: string | null  // When conversation complete
 }
 
 // Error
 {
-  type: 'error',
+  event: 'error',
   error: string
 }
 
 // Conversation end
 {
-  type: 'conversation_end',
+  event: 'conversation_end',
   conversationId: string,
   message: string
 }
@@ -409,7 +544,7 @@ The `ApplicationGateway` class (in `src/server/index.ts`) serves as a unified en
    - If no: Sends "good luck", status: `DONE`, decision: `DENIED`
 6. **Conversation continues** with `send_message` events
 7. **Status transitions**: `PENDING` → `START` → `ON_REQ` → `ON_JOB_QUESTIONS` → `DONE`
-8. **On completion**: Server sends `status_update` with `conversationComplete: true`, `screeningDecision`, and `screeningSummary`
+8. **On completion**: Server sends `status_update` with `screeningDecision` and `screeningSummary`
 
 ### State Management
 
@@ -677,25 +812,33 @@ ws://localhost:3000
 
 ## Architecture Highlights
 
-### Separation of Concerns
+### Domain-Driven Design
 
-- **Entities**: Domain models and database access (repository pattern)
-- **Services**: Business logic and orchestration
-- **Handlers**: LLM interaction and conversation flow
-- **Routes**: HTTP endpoint definitions
-- **Server**: WebSocket and HTTP server setup
+- **Domain Layer**: All business logic isolated in `domain/`
+- **Entity Layer**: Data access using repository pattern
+- **Infrastructure Layer**: Technical concerns (processor, server, database) at root level
+- **Clear Boundaries**: Explicit separation between business logic and infrastructure
 
 ### Type Safety
 
 - Zod schemas for validation at boundaries
 - TypeScript types throughout
 - Enum types for status values
+- String literal types for message senders
+
+### Functional Composition
+
+- Handlers are functional with explicit dependencies
+- Easy to test and mock
+- No hidden state or side effects
+- Clear dependency injection
 
 ### Extensibility
 
 - Criteria layer easily extended with new requirement types
 - Handler pattern allows adding new conversation states
 - LLM client abstraction supports multiple providers
+- Modular prompt builders
 
 ### Data Integrity
 
@@ -703,6 +846,33 @@ ws://localhost:3000
 - UUIDv4 for all IDs
 - PostgreSQL ENUMs for status values
 - JSONB for flexible criteria storage
+
+### Circular Dependency Prevention
+
+- Base schemas in isolated file (`base-schemas.ts`) with no imports
+- Prevents circular dependencies in criteria layer
+- Clean module boundaries
+
+---
+
+## Testing
+
+Tests are organized to mirror the source structure:
+
+```
+tests/
+├── domain/                    # Domain logic tests
+│   ├── application/
+│   ├── criteria/
+│   └── llm/
+├── entities/                  # Repository tests
+└── server/                    # Route tests
+```
+
+Run tests:
+```bash
+npm test
+```
 
 ---
 

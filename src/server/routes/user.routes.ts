@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { Pool } from 'pg';
 import { z } from 'zod';
 import { UserRepository } from '../../entities/user/repository';
-import { ApplicationService } from '../../services/application/service';
+import { ApplicationService } from '../../domain/application';
 import { ScreeningDecision, screeningDecisionSchema } from '../../entities';
 
 /**

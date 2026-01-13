@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { JobRequirementType } from '../../services/criteria/criteria-types';
+import { JobRequirementType } from '../../domain/criteria';
 
 /**
  * Base schema for criteria that allows required field to be optional.

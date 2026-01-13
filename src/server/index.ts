@@ -4,15 +4,16 @@ import {createServer} from 'http';
 import {WebSocketServer, WebSocket} from 'ws';
 import {Pool} from 'pg';
 import {pool} from '../database';
-import {createLLMClient, LLMProvider} from '../services/llm/client/factory';
-import {ApplicationService} from '../services/application/service';
-import {GreetingInitialHandler} from '../services/llm/greeting/initial-handler';
-import {GreetingResponseHandler} from '../services/llm/greeting/response-handler';
-import {RequirementHandler} from '../services/llm/requirement/handler';
-import {JobQuestionsHandler} from '../services/llm/job-questions/handler';
-import {CompletionHandler} from '../services/llm/completion/handler';
+import {createLLMClient, LLMProvider} from '../domain/llm/client/factory';
+import {ApplicationService} from '../domain/application';
+import {GreetingHandler} from '../domain/llm/greeting/handler';
+import {JobQuestionsHandler} from '../domain/llm/job-questions/handler';
 import {ConversationRepository} from '../entities/conversation/repository';
 import {ConversationJobRequirementRepository} from '../entities/conversation-job-requirement/repository';
+import {MessageRepository} from '../entities/message/repository';
+import {JobRequirementRepository} from '../entities/job-requirement/repository';
+import {JobFactRepository} from '../entities/job-fact/repository';
+import {createProcessor} from '../processor';
 import {ConversationStatus} from '../entities/conversation/domain';
 import {
     handleInitialConversation,
@@ -20,8 +21,8 @@ import {
     handleRequirementsResponse,
     handleJobQuestionsResponse,
     handleDoneConversation,
-} from '../services/sender/handler';
-import {ConversationContextService} from '../services/conversation-context/service';
+} from '../domain/prompts/handlers';
+import {ConversationContextService} from '../domain/conversation-context/service';
 import {createUserRoutes} from './routes/user.routes';
 import {createJobRoutes} from './routes/job.routes';
 import {createApplicationRoutes} from './routes/application.routes';
@@ -76,14 +77,17 @@ interface ServerMessage {
  */
 interface ServerDependencies {
     applicationService: ApplicationService;
-    greetingInitialHandler: GreetingInitialHandler;
-    greetingResponseHandler: GreetingResponseHandler;
-    requirementHandler: RequirementHandler;
+    greetingHandler: GreetingHandler;
     jobQuestionsHandler: JobQuestionsHandler;
-    completionHandler: CompletionHandler;
+    // Repositories and services for functional handlers
     conversationRepo: ConversationRepository;
     conversationJobRequirementRepo: ConversationJobRequirementRepository;
+    messageRepo: MessageRepository;
+    jobRequirementRepo: JobRequirementRepository;
+    jobFactRepo: JobFactRepository;
     conversationContextService: ConversationContextService;
+    llmClient: ReturnType<typeof createLLMClient>;
+    processor: ReturnType<typeof createProcessor>;
 }
 
 /**
@@ -157,16 +161,21 @@ const initializeDependencies = (): ServerDependencies => {
         model: process.env.OPENAI_MODEL || ''
     });
 
+    const processor = createProcessor({llmClient});
+
     return {
         applicationService: new ApplicationService(pool),
-        greetingInitialHandler: new GreetingInitialHandler(pool, llmClient),
-        greetingResponseHandler: new GreetingResponseHandler(pool, llmClient),
-        requirementHandler: new RequirementHandler(pool, llmClient),
+        greetingHandler: new GreetingHandler(pool, llmClient),
         jobQuestionsHandler: new JobQuestionsHandler(pool, llmClient),
-        completionHandler: new CompletionHandler(pool, llmClient),
+        // Repositories and services for functional handlers
         conversationRepo: new ConversationRepository(pool),
         conversationJobRequirementRepo: new ConversationJobRequirementRepository(pool),
+        messageRepo: new MessageRepository(pool),
+        jobRequirementRepo: new JobRequirementRepository(pool),
+        jobFactRepo: new JobFactRepository(pool),
         conversationContextService: new ConversationContextService(pool),
+        llmClient,
+        processor,
     };
 };
 
@@ -187,7 +196,7 @@ const handleStartConversation = async (
     try {
         const result = await handleInitialConversation(ws, userId, jobId, {
             applicationService: deps.applicationService,
-            greetingInitialHandler: deps.greetingInitialHandler
+            greetingHandler: deps.greetingHandler
         });
 
         // Track conversationId on this WebSocket connection for disconnect handling
@@ -225,42 +234,59 @@ const createStatusHandlerMap = (deps: ServerDependencies): Partial<Record<Conver
     [ConversationStatus.PENDING]: async (ws, conversationId, userMessage) => {
         // User responding to initial greeting (yes/no)
         return await handlePendingResponse(ws, conversationId, userMessage, {
-            greetingResponseHandler: deps.greetingResponseHandler,
+            greetingHandler: deps.greetingHandler,
             conversationRepo: deps.conversationRepo,
         });
     },
     [ConversationStatus.START]: async (ws, conversationId, userMessage) => {
         // START is a transient state - route to requirements handler
-        // (shouldn't happen if GreetingResponseHandler sets ON_REQ, but handle it just in case)
+        // (shouldn't happen if GreetingHandler sets ON_REQ, but handle it just in case)
         return await handleRequirementsResponse(ws, conversationId, userMessage, {
-            requirementHandler: deps.requirementHandler,
-            completionHandler: deps.completionHandler,
             conversationRepo: deps.conversationRepo,
+            messageRepo: deps.messageRepo,
             conversationJobRequirementRepo: deps.conversationJobRequirementRepo,
+            jobRequirementRepo: deps.jobRequirementRepo,
+            jobFactRepo: deps.jobFactRepo,
+            contextService: deps.conversationContextService,
+            processor: deps.processor,
+            llmClient: deps.llmClient,
         });
     },
     [ConversationStatus.ON_REQ]: async (ws, conversationId, userMessage) => {
         // Handle requirement question response
         return await handleRequirementsResponse(ws, conversationId, userMessage, {
-            requirementHandler: deps.requirementHandler,
-            completionHandler: deps.completionHandler,
             conversationRepo: deps.conversationRepo,
+            messageRepo: deps.messageRepo,
             conversationJobRequirementRepo: deps.conversationJobRequirementRepo,
+            jobRequirementRepo: deps.jobRequirementRepo,
+            jobFactRepo: deps.jobFactRepo,
+            contextService: deps.conversationContextService,
+            processor: deps.processor,
+            llmClient: deps.llmClient,
         });
     },
     [ConversationStatus.ON_JOB_QUESTIONS]: async (ws, conversationId, userMessage) => {
         // Handle job question
         return await handleJobQuestionsResponse(ws, conversationId, userMessage, {
             jobQuestionsHandler: deps.jobQuestionsHandler,
-            completionHandler: deps.completionHandler,
             conversationRepo: deps.conversationRepo,
+            messageRepo: deps.messageRepo,
+            conversationJobRequirementRepo: deps.conversationJobRequirementRepo,
+            jobRequirementRepo: deps.jobRequirementRepo,
+            jobFactRepo: deps.jobFactRepo,
+            llmClient: deps.llmClient,
         });
     },
-    [ConversationStatus.DONE]: async (ws, conversationId) => {
+    [ConversationStatus.DONE]: async (ws, conversationId, userMessage) => {
         // Conversation is done - send completion message
-        // Note: DONE handler doesn't use userMessage, but we include it for type consistency
-        return await handleDoneConversation(ws, conversationId, {
-            completionHandler: deps.completionHandler,
+        // Note: DONE handler doesn't use ws or userMessage, but we include them for type consistency
+        return await handleDoneConversation(ws, conversationId, userMessage, {
+            conversationRepo: deps.conversationRepo,
+            messageRepo: deps.messageRepo,
+            conversationJobRequirementRepo: deps.conversationJobRequirementRepo,
+            jobRequirementRepo: deps.jobRequirementRepo,
+            jobFactRepo: deps.jobFactRepo,
+            llmClient: deps.llmClient,
         });
     },
 });

@@ -4,7 +4,7 @@
 
 import { Pool, QueryResult } from 'pg';
 import { JobRequirementRepository } from '../../../src/entities/job-requirement/repository';
-import { JobRequirementType } from '../../../src/services/criteria/criteria-types';
+import { JobRequirementType } from '../../../src/domain/criteria';
 
 describe('JobRequirementRepository', () => {
   let mockPool: jest.Mocked<Pool>;
